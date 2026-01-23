@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import io
 from datetime import datetime
+import numpy as np
 
 app = FastAPI()
 
@@ -262,13 +263,27 @@ async def process_file(
         summary = summarize_by_cdp(dfh, capacity_points=cap)
         results[label] = summary.to_dict(orient="records")
 
+
+    def safe_json(value):
+        if isinstance(value, float) and (np.isnan(value) or np.isinf(value)):
+            return None
+        return value
+
+    # juste avant ton return final :
+    df = df.replace([np.inf, -np.inf], np.nan)
+    df = df.where(pd.notnull(df), None)
+
+    charge_cdp = locals().get("charge_cdp", None)
+
     return {
         "ok": True,
         "nb_devis_en_cours": nb_devis,
         "ca_total_devis_en_cours": ca_total,
         "capacites_points": {"1M": capacity_1m, "3M": capacity_3m, "6M": capacity_6m},
         "resultats_par_horizon": results,
-    }
+        "charge_cdp": safe_json(charge_cdp),
+}
+
 
 
 
