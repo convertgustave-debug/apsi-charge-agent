@@ -1,29 +1,12 @@
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, HTTPException
 from pydantic import BaseModel
-import os
 from pathlib import Path
-import io
 import pandas as pd
 
-ANCHOR_COL = "Nom de l'opportunité"
-
-def read_export_excel(content_bytes: bytes) -> pd.DataFrame:
-    raw = pd.read_excel(io.BytesIO(content_bytes), sheet_name=0, header=None)
-
-    header_row = None
-    for i in range(min(50, len(raw))):
-        row_values = raw.iloc[i].astype(str)
-        if (row_values == ANCHOR_COL).any():
-            header_row = i
-            break
-
-    if header_row is None:
-        raise ValueError(f"Impossible de détecter l'en-tête (colonne repère '{ANCHOR_COL}')")
-
-    df = pd.read_excel(io.BytesIO(content_bytes), sheet_name=0, header=header_row)
-    return df
-
 app = FastAPI()
+
+UPLOAD_DIR = Path("uploads")
+UPLOAD_DIR.mkdir(exist_ok=True)
 
 
 class Payload(BaseModel):
@@ -42,20 +25,14 @@ def health():
 
 @app.post("/set_charge")
 def set_charge(payload: Payload):
-    # Ici on valide juste et on renvoie la valeur.
-    # Plus tard, on fera le vrai calcul + stockage si tu veux.
     if payload.charge_max < 0:
         return {"ok": False, "error": "charge_max must be >= 0"}
 
     return {"ok": True, "charge_max": payload.charge_max}
 
 
-UPLOAD_DIR = Path("uploads")
-UPLOAD_DIR.mkdir(exist_ok=True)
-
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
-    # On enregistre le fichier dans /uploads
     file_path = UPLOAD_DIR / file.filename
 
     with open(file_path, "wb") as f:
@@ -64,9 +41,49 @@ async def upload_file(file: UploadFile = File(...)):
     return {
         "ok": True,
         "filename": file.filename,
-        "saved_as": str(file_path)
+        "saved_as": str(file_path),
     }
 
+
+@app.post("/process")
+async def process_file(file: UploadFile = File(...)):
+    # 1) Sauvegarde temporaire
+    file_path = UPLOAD_DIR / file.filename
+    with open(file_path, "wb") as f:
+        f.write(await file.read())
+
+    # 2) Lecture Excel
+    try:
+        df = pd.read_excel(file_path)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Erreur lecture Excel: {str(e)}")
+
+    # 3) Vérif colonne "nom"
+    df.columns = [str(c).strip().lower() for c in df.columns]
+    if "nom" not in df.columns:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Colonne 'nom' introuvable. Colonnes trouvées: {list(df.columns)}",
+        )
+
+    # 4) Nettoyage
+    noms = (
+        df["nom"]
+        .dropna()
+        .astype(str)
+        .str.strip()
+        .replace("", pd.NA)
+        .dropna()
+        .unique()
+        .tolist()
+    )
+
+    return {
+        "ok": True,
+        "nb_lignes": int(len(df)),
+        "nb_noms_uniques": int(len(noms)),
+        "noms": noms,
+    }
 
 
 
