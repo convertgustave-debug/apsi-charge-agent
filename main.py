@@ -86,25 +86,13 @@ noms = (
     .tolist()
 )
 
-
-    # 4) Nettoyage
-    noms = (
-        df["nom"]
-        .dropna()
-        .astype(str)
-        .str.strip()
-        .replace("", pd.NA)
-        .dropna()
-        .unique()
-        .tolist()
-    )
-
     return {
         "ok": True,
         "nb_lignes": int(len(df)),
         "nb_noms_uniques": int(len(noms)),
         "noms": noms,
     }
+
 
 
 
