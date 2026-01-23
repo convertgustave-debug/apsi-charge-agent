@@ -5,6 +5,7 @@ import pandas as pd
 
 app = FastAPI()
 
+# Dossier où on stocke les fichiers uploadés
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 
@@ -33,6 +34,9 @@ def set_charge(payload: Payload):
 
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
+    """
+    Upload simple : enregistre le fichier dans /uploads et renvoie le chemin.
+    """
     file_path = UPLOAD_DIR / file.filename
 
     with open(file_path, "wb") as f:
@@ -44,36 +48,48 @@ async def upload_file(file: UploadFile = File(...)):
         "saved_as": str(file_path),
     }
 
+
 @app.post("/process")
-    async def process_file(file: UploadFile = File(...)):
-        # 1) Sauvegarde temporaire
-        file_path = UPLOAD_DIR / file.filename
-        with open(file_path, "wb") as f:
-            f.write(await file.read())
+async def process_file(file: UploadFile = File(...)):
+    """
+    Upload + lecture excel + extraction de la colonne nom.
+    """
+    # 1) Sauvegarde fichier
+    file_path = UPLOAD_DIR / file.filename
+    with open(file_path, "wb") as f:
+        f.write(await file.read())
 
-        # 2) Lecture Excel
-        try:
-            df = pd.read_excel(file_path)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Erreur lecture Excel: {str(e)}")
+    # 2) Lecture Excel
+    try:
+        df = pd.read_excel(file_path)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Erreur lecture Excel: {str(e)}")
 
-        # 3) Vérif colonne "nom"
-        df.columns = [str(c).strip().lower() for c in df.columns]
-      # Colonnes possibles pour le "nom"
-    possible_cols = ["nom", "nom de l'opportunité", "nom opportunité", "opportunité"]
+    # 3) Normaliser les noms de colonnes
+    df.columns = [str(c).strip().lower() for c in df.columns]
+
+    # 4) Trouver la bonne colonne "nom"
+    possible_cols = [
+        "nom",
+        "nom de l'opportunité",
+        "nom opportunité",
+        "opportunité",
+        "opportunite",  # sans accent au cas où
+    ]
 
     col_found = None
     for c in possible_cols:
         if c in df.columns:
             col_found = c
             break
-    
+
     if col_found is None:
         raise HTTPException(
             status_code=400,
-            detail=f"Aucune colonne nom trouvée. Colonnes trouvées: {list(df.columns)}",
-    )
+            detail=f"Colonne 'nom' introuvable. Colonnes trouvées: {list(df.columns)}",
+        )
 
+    # 5) Extraire + nettoyer les noms
     noms = (
         df[col_found]
         .dropna()
@@ -83,23 +99,15 @@ async def upload_file(file: UploadFile = File(...)):
         .dropna()
         .unique()
         .tolist()
-)
+    )
 
     return {
         "ok": True,
+        "colonne_utilisee": col_found,
         "nb_lignes": int(len(df)),
         "nb_noms_uniques": int(len(noms)),
         "noms": noms,
-}
-
-
-
-
-
-
-
-
-
+    }
 
 
 
