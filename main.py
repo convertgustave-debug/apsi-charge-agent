@@ -15,9 +15,9 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 # =========================================================
 
 class ChargeConfig(BaseModel):
-    charge_max_1m: float = 12
-    charge_max_3m: float = 25
-    charge_max_6m: float = 40
+    charge_max_1m: float = 85
+    charge_max_3m: float = 250
+    charge_max_6m: float = 500
 
 CHARGE_CONFIG = ChargeConfig()
 
@@ -375,6 +375,7 @@ async def process_file(file: UploadFile = File(...)):
     }
 
     return sanitize_json(payload)
+
 
 
 
