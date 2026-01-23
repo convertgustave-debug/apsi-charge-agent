@@ -60,11 +60,32 @@ async def process_file(file: UploadFile = File(...)):
 
     # 3) Vérif colonne "nom"
     df.columns = [str(c).strip().lower() for c in df.columns]
-    if "nom" not in df.columns:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Colonne 'nom' introuvable. Colonnes trouvées: {list(df.columns)}",
-        )
+  # Colonnes possibles pour le "nom"
+possible_cols = ["nom", "nom de l'opportunité", "nom opportunité", "opportunité"]
+
+col_found = None
+for c in possible_cols:
+    if c in df.columns:
+        col_found = c
+        break
+
+if col_found is None:
+    raise HTTPException(
+        status_code=400,
+        detail=f"Aucune colonne nom trouvée. Colonnes trouvées: {list(df.columns)}",
+    )
+
+noms = (
+    df[col_found]
+    .dropna()
+    .astype(str)
+    .str.strip()
+    .replace("", pd.NA)
+    .dropna()
+    .unique()
+    .tolist()
+)
+
 
     # 4) Nettoyage
     noms = (
@@ -84,6 +105,7 @@ async def process_file(file: UploadFile = File(...)):
         "nb_noms_uniques": int(len(noms)),
         "noms": noms,
     }
+
 
 
 
