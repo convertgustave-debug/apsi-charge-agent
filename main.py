@@ -85,13 +85,13 @@ noms = (
     .unique()
     .tolist()
 )
-
-    return {
+return {
         "ok": True,
         "nb_lignes": int(len(df)),
         "nb_noms_uniques": int(len(noms)),
         "noms": noms,
-    }
+}
+
 
 
 
