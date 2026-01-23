@@ -1,25 +1,95 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Form
+from fastapi import FastAPI, UploadFile, File, HTTPException
+from pydantic import BaseModel
+from pathlib import Path
+from datetime import datetime, date
 import pandas as pd
-import numpy as np
-import io
-from datetime import datetime
 import numpy as np
 
 app = FastAPI()
 
-# -----------------------------
-# Paramètres & mappings
-# -----------------------------
-STATUS_COL = "statut de l'opportunité"
-CDP_COL = "cdp mobilier"
-DEADLINE_COL = "date d'échéance du projet"
-CA_COL = "ca potentiel mob"
-TRANSFO_COL = "tx de transfo mob"
-COMPLEX_COL = "complexité du projet"
-SEG_COL = "segmenation mob"  # (oui il y a une typo dans l'export)
+UPLOAD_DIR = Path("uploads")
+UPLOAD_DIR.mkdir(exist_ok=True)
 
-# Segmentation -> score
-SEG_MAP = {
+# =========================================================
+# CONFIG CHARGE MAX (capacité max en points par horizon)
+# =========================================================
+
+class ChargeConfig(BaseModel):
+    charge_max_1m: float = 12
+    charge_max_3m: float = 25
+    charge_max_6m: float = 40
+
+CHARGE_CONFIG = ChargeConfig()
+
+
+@app.get("/")
+def root():
+    return {"status": "ok", "message": "APSI charge agent is running"}
+
+
+@app.get("/health")
+def health():
+    return {"status": "healthy"}
+
+
+@app.post("/set_charge")
+def set_charge(config: ChargeConfig):
+    global CHARGE_CONFIG
+    CHARGE_CONFIG = config
+    return {"ok": True, "charge_config": CHARGE_CONFIG.model_dump()}
+
+
+# =========================================================
+# UTILS
+# =========================================================
+
+def sanitize_json(obj):
+    """
+    Convertit récursivement NaN / +Inf / -Inf en None
+    pour éviter: ValueError: Out of range float values are not JSON compliant
+    """
+    if isinstance(obj, float) and (np.isnan(obj) or np.isinf(obj)):
+        return None
+    if isinstance(obj, dict):
+        return {k: sanitize_json(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [sanitize_json(v) for v in obj]
+    return obj
+
+
+def normalize_str(x):
+    if pd.isna(x):
+        return None
+    return str(x).strip().lower()
+
+
+def parse_date_safe(value):
+    """
+    Essaye de convertir une valeur Excel en date.
+    Renvoie un objet date ou None.
+    """
+    if pd.isna(value):
+        return None
+    try:
+        d = pd.to_datetime(value, errors="coerce")
+        if pd.isna(d):
+            return None
+        return d.date()
+    except Exception:
+        return None
+
+
+def days_until(d: date):
+    if d is None:
+        return None
+    return (d - date.today()).days
+
+
+# =========================================================
+# CALCULS MÉTIER
+# =========================================================
+
+SEGMENTATION_MAP = {
     "stratégique": 4,
     "strategique": 4,
     "projet": 3,
@@ -30,285 +100,282 @@ SEG_MAP = {
     "a developper": 1,
 }
 
-# Transfo -> coeff
-TRANSFO_COEFF = {
+TRANSFO_MAP = {
+    "20%": 0.70,
+    "40%": 0.85,
+    "60%": 1.00,
+    "80%": 1.15,
     20: 0.70,
     40: 0.85,
     60: 1.00,
     80: 1.15,
+    0.2: 0.70,
+    0.4: 0.85,
+    0.6: 1.00,
+    0.8: 1.15,
 }
 
-
-def norm_colname(c: str) -> str:
-    return str(c).strip().lower()
-
-
-def urgency_coeff(days_to_deadline: int, horizon: str) -> float:
-    """
-    Coeff urgence selon horizon (1M / 3M / 6M).
-    Plus la deadline est proche, plus le coeff est élevé.
-    """
-    if days_to_deadline is None or np.isnan(days_to_deadline):
-        return 1.0
-
-    d = int(days_to_deadline)
-
-    if horizon == "1M":
-        if d <= 7:
-            return 1.40
-        if d <= 14:
-            return 1.25
-        if d <= 30:
-            return 1.10
-        return 1.0
-
-    if horizon == "3M":
-        if d <= 15:
-            return 1.50
-        if d <= 30:
-            return 1.35
-        if d <= 60:
-            return 1.15
-        if d <= 90:
-            return 1.00
-        return 1.0
-
-    if horizon == "6M":
-        if d <= 30:
-            return 1.45
-        if d <= 60:
-            return 1.30
-        if d <= 120:
-            return 1.10
-        if d <= 180:
-            return 1.00
-        return 1.0
-
-    return 1.0
+# Valeurs moyennes demandées si case vide
+AVG_COMPLEXITE = 2.5
+AVG_SEGMENTATION = 2.5
+AVG_TRANSFO = (0.70 + 0.85 + 1.00 + 1.15) / 4  # 0.925
 
 
-def parse_transfo_to_coeff(v) -> float:
-    """
-    Supporte "20%", "40", 60.0 etc.
-    """
-    s = str(v).replace("%", "").replace(",", ".").strip()
+def get_complexite(val):
+    if pd.isna(val):
+        return AVG_COMPLEXITE
     try:
-        val = int(float(s))
+        v = float(val)
+        if v < 1 or v > 4:
+            return AVG_COMPLEXITE
+        return v
+    except Exception:
+        return AVG_COMPLEXITE
+
+
+def get_segmentation(val):
+    if pd.isna(val):
+        return AVG_SEGMENTATION
+    s = normalize_str(val)
+    if s is None:
+        return AVG_SEGMENTATION
+    return float(SEGMENTATION_MAP.get(s, AVG_SEGMENTATION))
+
+
+def get_transfo_coeff(val):
+    if pd.isna(val):
+        return AVG_TRANSFO
+
+    # si c'est numérique (20,40,60,80 ou 0.2 etc.)
+    if isinstance(val, (int, float, np.integer, np.floating)):
+        return float(TRANSFO_MAP.get(val, AVG_TRANSFO))
+
+    s = str(val).strip()
+    return float(TRANSFO_MAP.get(s, AVG_TRANSFO))
+
+
+def coeff_urgence(days_left, horizon_days):
+    """
+    Coeff urgence basé sur la fenêtre (horizon) + nb jours restants
+    Notes (selon ton schéma):
+    - 1 mois (<=30j) : <=7j ->1.4 ; 8-14 ->1.25 ; 15-30 ->1.10
+    - 3 mois (~90j) : <=15 ->1.5 ; 16-30 ->1.35 ; 31-60 ->1.15 ; 61-90 ->1.00
+    - 6 mois (~180j): <=30 ->1.15 ; 31-60 ->1.30 ; 61-120 ->1.10 ; 121-180 ->1.00
+    Si date manquante -> coeff = 1.0 (ne pas “inventer” d’urgence)
+    """
+    if days_left is None:
+        return 1.0
+
+    # si déjà en retard (négatif) => urgence max
+    if days_left < 0:
+        return 1.5
+
+    if horizon_days <= 30:
+        if days_left <= 7:
+            return 1.40
+        if days_left <= 14:
+            return 1.25
+        return 1.10
+
+    if horizon_days <= 90:
+        if days_left <= 15:
+            return 1.50
+        if days_left <= 30:
+            return 1.35
+        if days_left <= 60:
+            return 1.15
+        return 1.00
+
+    # horizon 180
+    if days_left <= 30:
+        return 1.15
+    if days_left <= 60:
+        return 1.30
+    if days_left <= 120:
+        return 1.10
+    return 1.00
+
+
+def coeff_ca(ca_val, ca_max_periode):
+    """
+    Coeff CA = 1 + 0.1 * (CA_projet / CA_max_de_la_période)
+    Si CA manquant -> 1.0
+    Si ca_max_periode manquant ou 0 -> 1.0
+    """
+    if pd.isna(ca_val):
+        return 1.0
+    if ca_max_periode is None or ca_max_periode <= 0:
+        return 1.0
+    try:
+        ca = float(ca_val)
+        return 1.0 + 0.1 * (ca / float(ca_max_periode))
     except Exception:
         return 1.0
-    return TRANSFO_COEFF.get(val, 1.0)
 
 
-def compute_charge_points(df: pd.DataFrame, horizon: str, days_limit: int) -> pd.DataFrame:
+def compute_charge_projet(row, ca_max_periode, horizon_days):
     """
-    Calcule la charge projet pour chaque ligne dans la fenêtre [0..days_limit]
-    Renvoie un df filtré et enrichi.
+    Charge projet = Score * coeff_transfo * coeff_urgence * coeff_CA
+    Score = 0.5*complexité + 0.5*segmentation
     """
-    today = pd.Timestamp(datetime.now().date())
+    complexite = get_complexite(row.get("complexite"))
+    segmentation = get_segmentation(row.get("segmentation"))
+    score = 0.5 * complexite + 0.5 * segmentation
 
-    dfh = df.copy()
-    dfh["days_to_deadline"] = (dfh[DEADLINE_COL] - today).dt.days
+    transfo = get_transfo_coeff(row.get("transformation"))
 
-    # Garde uniquement les projets dans l'horizon
-    dfh = dfh[
-        (dfh["days_to_deadline"].notna())
-        & (dfh["days_to_deadline"] >= 0)
-        & (dfh["days_to_deadline"] <= days_limit)
-    ].copy()
+    d_echeance = row.get("date_echeance")
+    jours = days_until(d_echeance)
 
-    # Coeff CA (bonus max +10%)
-    ca_max = dfh["ca"].max() if len(dfh) else 0.0
-    if ca_max <= 0:
-        dfh["ca_coeff"] = 1.0
-    else:
-        dfh["ca_coeff"] = 1.0 + 0.10 * np.minimum(dfh["ca"] / ca_max, 1.0)
+    urg = coeff_urgence(jours, horizon_days)
 
-    dfh["urgence_coeff"] = dfh["days_to_deadline"].apply(lambda d: urgency_coeff(d, horizon))
+    ca = row.get("ca")
+    ca_coeff = coeff_ca(ca, ca_max_periode)
 
-    # Score de base = moyenne Complexité & Segmentation
-    dfh["core_score"] = 0.5 * dfh["complexite"] + 0.5 * dfh["seg_score"]
-
-    # Charge projet finale
-    dfh["charge_projet"] = (
-        dfh["core_score"] * dfh["transfo_coeff"] * dfh["urgence_coeff"] * dfh["ca_coeff"]
-    )
-
-    return dfh
+    charge = score * transfo * urg * ca_coeff
+    return float(charge)
 
 
-def summarize_by_cdp(dfh: pd.DataFrame, capacity_points: float) -> pd.DataFrame:
-    """
-    Agrège par CDP Mobilier : nb projets, CA cumulé, charge points, taux charge normalisé.
-    """
-    if len(dfh) == 0:
-        return pd.DataFrame(columns=[
-            "cdp_mobilier",
-            "nb_projets",
-            "ca_cumule",
-            "charge_points",
-            "taux_charge_normalise_pct",
-            "statut_charge",
-        ])
-
-    grp = (
-        dfh.groupby(CDP_COL, dropna=False)
-        .agg(
-            nb_projets=("charge_projet", "count"),
-            ca_cumule=("ca", "sum"),
-            charge_points=("charge_projet", "sum"),
-        )
-        .reset_index()
-        .rename(columns={CDP_COL: "cdp_mobilier"})
-    )
-
-    if capacity_points <= 0:
-        grp["taux_charge_normalise_pct"] = np.nan
-    else:
-        grp["taux_charge_normalise_pct"] = 100.0 * grp["charge_points"] / float(capacity_points)
-
-    def status_label(x: float) -> str:
-        if pd.isna(x):
-            return ""
-        if x < 90:
-            return "OK"
-        if x <= 110:
-            return "Attention"
-        return "Surcharge"
-
-    grp["statut_charge"] = grp["taux_charge_normalise_pct"].apply(status_label)
-    grp = grp.sort_values("taux_charge_normalise_pct", ascending=False)
-
-    return grp
-
-
-# -----------------------------
-# API
-# -----------------------------
-@app.get("/health")
-def health():
-    return {"status": "healthy"}
-
+# =========================================================
+# ENDPOINT PRINCIPAL
+# =========================================================
 
 @app.post("/process")
-async def process_file(
-    file: UploadFile = File(...),
-    capacity_1m: float = Form(12),
-    capacity_3m: float = Form(25),
-    capacity_6m: float = Form(40),
-):
-    """
-    Upload Excel -> filtre devis en cours -> calcule charge par CDP (1M/3M/6M) -> renvoie JSON.
-    """
+async def process_file(file: UploadFile = File(...)):
+    # 1) Sauvegarde temporaire
+    file_path = UPLOAD_DIR / file.filename
+    with open(file_path, "wb") as f:
+        f.write(await file.read())
 
-    content = await file.read()
-
-    # Lecture Excel
+    # 2) Lecture Excel
     try:
-        df = pd.read_excel(io.BytesIO(content))
+        df = pd.read_excel(file_path)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Erreur lecture Excel: {str(e)}")
 
-    # Normalisation colonnes
-    df.columns = [norm_colname(c) for c in df.columns]
+    # 3) Normalisation des colonnes
+    df.columns = [str(c).strip().lower() for c in df.columns]
 
-    # Vérifications colonnes indispensables
-    required_cols = [STATUS_COL, CDP_COL, DEADLINE_COL, CA_COL, TRANSFO_COL]
-    missing = [c for c in required_cols if c not in df.columns]
+    # 4) Colonnes attendues (on accepte quelques variations)
+    def pick_col(possibles):
+        for c in possibles:
+            if c in df.columns:
+                return c
+        return None
+
+    col_cdp = pick_col(["cdp mobilier", "cdp", "chef de projet", "cdp mob"])
+    col_statut = pick_col(["statut de l'opportunité", "statut opportunité", "statut"])
+    col_echeance = pick_col(["dat d'échéance du projet", "date d'échéance du projet", "date echeance", "échéance"])
+    col_complexite = pick_col(["complexité du projet", "complexite du projet", "complexite"])
+    col_segmentation = pick_col(["segmentation mob", "segmentation", "segmentation mobilier"])
+    col_transfo = pick_col(["tx de transfo mob", "tx de transfo", "taux de transfo", "transformation"])
+    col_ca = pick_col(["ca potentiel mobilier", "ca potentiel", "ca", "montant"])
+
+    missing = [name for name, col in [
+        ("CDP", col_cdp),
+        ("Statut", col_statut),
+        ("Date échéance", col_echeance),
+        ("Complexité", col_complexite),
+        ("Segmentation", col_segmentation),
+        ("Transformation", col_transfo),
+        ("CA", col_ca),
+    ] if col is None]
+
     if missing:
         raise HTTPException(
             status_code=400,
-            detail=f"Colonnes manquantes: {missing}. Colonnes trouvées: {list(df.columns)}",
+            detail=f"Colonnes manquantes: {missing}. Colonnes trouvées: {list(df.columns)}"
         )
 
-    # Filtre devis en cours
-    df[STATUS_COL] = df[STATUS_COL].astype(str).str.strip().str.lower()
-    df = df[df[STATUS_COL] == "devis en cours"].copy()
+    # 5) Dataframe de travail standardisé
+    work = pd.DataFrame({
+        "cdp": df[col_cdp],
+        "statut": df[col_statut],
+        "date_echeance": df[col_echeance].apply(parse_date_safe),
+        "complexite": df[col_complexite],
+        "segmentation": df[col_segmentation],
+        "transformation": df[col_transfo],
+        "ca": df[col_ca],
+    })
 
-    # Parsing date échéance
-    df[DEADLINE_COL] = pd.to_datetime(df[DEADLINE_COL], dayfirst=True, errors="coerce")
+    # 6) Filtre : uniquement "Devis en cours"
+    work["statut_norm"] = work["statut"].apply(normalize_str)
+    devis_en_cours = work[work["statut_norm"] == "devis en cours"].copy()
 
-    # CA
-    df["ca"] = pd.to_numeric(df[CA_COL], errors="coerce").fillna(0.0)
+    # Si aucun projet
+    if len(devis_en_cours) == 0:
+        payload = {
+            "ok": True,
+            "nb_devis_en_cours": 0,
+            "charge_cdp": [],
+            "capacites_points": {
+                "1M": CHARGE_CONFIG.charge_max_1m,
+                "3M": CHARGE_CONFIG.charge_max_3m,
+                "6M": CHARGE_CONFIG.charge_max_6m,
+            },
+        }
+        return sanitize_json(payload)
 
-    # Complexité (défaut 2 si absent)
-    if COMPLEX_COL in df.columns:
-        df["complexite"] = pd.to_numeric(df[COMPLEX_COL], errors="coerce").fillna(2.0)
+    # 7) CA max période (pour coeff CA)
+    # On prend le max CA dans les projets "devis en cours" (période)
+    ca_max_periode = pd.to_numeric(devis_en_cours["ca"], errors="coerce").max()
+    if pd.isna(ca_max_periode):
+        ca_max_periode = None
     else:
-        df["complexite"] = 2.0
+        ca_max_periode = float(ca_max_periode)
 
-    # Segmentation (défaut 2 si absent)
-    if SEG_COL in df.columns:
-        seg = df[SEG_COL].astype(str).str.strip().str.lower()
-        df["seg_score"] = seg.map(SEG_MAP).fillna(2.0)
-    else:
-        df["seg_score"] = 2.0
-
-    # Transfo coeff
-    df["transfo_coeff"] = df[TRANSFO_COL].apply(parse_transfo_to_coeff)
-
-    # Infos globales
-    nb_devis = int(len(df))
-    ca_total = float(df["ca"].sum())
-
-    # Horizons
+    # 8) Calcul charge par horizon
     horizons = [
-        ("1M", 30, capacity_1m),
-        ("3M", 90, capacity_3m),
-        ("6M", 180, capacity_6m),
+        ("1M", 30, float(CHARGE_CONFIG.charge_max_1m)),
+        ("3M", 90, float(CHARGE_CONFIG.charge_max_3m)),
+        ("6M", 180, float(CHARGE_CONFIG.charge_max_6m)),
     ]
 
-    results = {}
-    for label, days_limit, cap in horizons:
-        dfh = compute_charge_points(df, horizon=label, days_limit=days_limit)
-        summary = summarize_by_cdp(dfh, capacity_points=cap)
-        results[label] = summary.to_dict(orient="records")
+    results_by_horizon = {}
 
+    for label, horizon_days, cap in horizons:
+        tmp = devis_en_cours.copy()
 
-        # =========================
-        # JSON SAFE (anti NaN / Inf)
-        # =========================
-   
+        # calcul charge projet
+        tmp["charge_projet"] = tmp.apply(
+            lambda r: compute_charge_projet(r, ca_max_periode=ca_max_periode, horizon_days=horizon_days),
+            axis=1
+        )
 
-    def sanitize_json(obj):
-        """
-        Convertit tous les NaN / +Inf / -Inf en None, récursivement,
-        pour éviter: ValueError: Out of range float values are not JSON compliant
-        """
-        if isinstance(obj, float) and (np.isnan(obj) or np.isinf(obj)):
-            return None
-        if isinstance(obj, dict):
-            return {k: sanitize_json(v) for k, v in obj.items()}
-        if isinstance(obj, list):
-            return [sanitize_json(v) for v in obj]
-        return obj
+        # agrégation par CDP
+        agg = tmp.groupby("cdp", dropna=True)["charge_projet"].sum().reset_index()
+        agg = agg.rename(columns={"charge_projet": "charge_cdp"})
 
-    # Nettoyage du dataframe (au cas où)
-    df = df.replace([np.inf, -np.inf], np.nan)
-    df = df.where(pd.notnull(df), None)
+        # taux de charge
+        agg["taux_charge_%"] = agg["charge_cdp"].apply(lambda x: (x / cap) * 100 if cap > 0 else None)
 
-    # Toujours définir charge_cdp quoi qu'il arrive
-    try:
-        charge_cdp
-    except NameError:
-        charge_cdp = None
+        # format sortie
+        out = []
+        for _, row in agg.iterrows():
+            out.append({
+                "cdp": row["cdp"],
+                "charge_cdp": float(row["charge_cdp"]),
+                "taux_charge_%": float(row["taux_charge_%"]) if not pd.isna(row["taux_charge_%"]) else None,
+            })
 
+        # tri du plus chargé au moins chargé
+        out.sort(key=lambda x: x["charge_cdp"], reverse=True)
+        results_by_horizon[label] = out
 
     payload = {
         "ok": True,
-        "nb_devis_en_cours": int(nb_devis),
-        "ca_total_devis_en_cours": ca_total,
+        "nb_devis_en_cours": int(len(devis_en_cours)),
+        "ca_max_periode": ca_max_periode,
         "capacites_points": {
-            "1M": capacity_1m,
-            "3M": capacity_3m,
-            "6M": capacity_6m,
+            "1M": float(CHARGE_CONFIG.charge_max_1m),
+            "3M": float(CHARGE_CONFIG.charge_max_3m),
+            "6M": float(CHARGE_CONFIG.charge_max_6m),
         },
-        "resultats_par_horizon": results,
-        "charge_cdp": charge_cdp,  
-}
+        "charge_par_horizon": results_by_horizon,
+    }
 
     return sanitize_json(payload)
 
-  
 
 
 
