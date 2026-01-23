@@ -286,6 +286,13 @@ async def process_file(
     df = df.replace([np.inf, -np.inf], np.nan)
     df = df.where(pd.notnull(df), None)
 
+    # Toujours définir charge_cdp quoi qu'il arrive
+    try:
+        charge_cdp
+    except NameError:
+        charge_cdp = None
+
+
     payload = {
         "ok": True,
         "nb_devis_en_cours": int(nb_devis),
@@ -302,6 +309,7 @@ async def process_file(
     return sanitize_json(payload)
 
   
+
 
 
 
