@@ -1,5 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, UploadFile, File
 from pydantic import BaseModel
+import os
+from pathlib import Path
 
 app = FastAPI()
 
@@ -27,9 +29,6 @@ def set_charge(payload: Payload):
 
     return {"ok": True, "charge_max": payload.charge_max}
 
-from fastapi import UploadFile, File
-import os
-from pathlib import Path
 
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
@@ -47,6 +46,7 @@ async def upload_file(file: UploadFile = File(...)):
         "filename": file.filename,
         "saved_as": str(file_path)
     }
+
 
 
 
