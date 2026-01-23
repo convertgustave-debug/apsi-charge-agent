@@ -44,53 +44,56 @@ async def upload_file(file: UploadFile = File(...)):
         "saved_as": str(file_path),
     }
 
-
 @app.post("/process")
-async def process_file(file: UploadFile = File(...)):
-    # 1) Sauvegarde temporaire
-    file_path = UPLOAD_DIR / file.filename
-    with open(file_path, "wb") as f:
-        f.write(await file.read())
+    async def process_file(file: UploadFile = File(...)):
+        # 1) Sauvegarde temporaire
+        file_path = UPLOAD_DIR / file.filename
+        with open(file_path, "wb") as f:
+            f.write(await file.read())
 
-    # 2) Lecture Excel
-    try:
-        df = pd.read_excel(file_path)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Erreur lecture Excel: {str(e)}")
+        # 2) Lecture Excel
+        try:
+            df = pd.read_excel(file_path)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Erreur lecture Excel: {str(e)}")
 
-    # 3) Vérif colonne "nom"
-    df.columns = [str(c).strip().lower() for c in df.columns]
-  # Colonnes possibles pour le "nom"
-possible_cols = ["nom", "nom de l'opportunité", "nom opportunité", "opportunité"]
+        # 3) Vérif colonne "nom"
+        df.columns = [str(c).strip().lower() for c in df.columns]
+      # Colonnes possibles pour le "nom"
+    possible_cols = ["nom", "nom de l'opportunité", "nom opportunité", "opportunité"]
 
-col_found = None
-for c in possible_cols:
-    if c in df.columns:
-        col_found = c
-        break
-
-if col_found is None:
-    raise HTTPException(
-        status_code=400,
-        detail=f"Aucune colonne nom trouvée. Colonnes trouvées: {list(df.columns)}",
+    col_found = None
+    for c in possible_cols:
+        if c in df.columns:
+            col_found = c
+            break
+    
+    if col_found is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Aucune colonne nom trouvée. Colonnes trouvées: {list(df.columns)}",
     )
 
-noms = (
-    df[col_found]
-    .dropna()
-    .astype(str)
-    .str.strip()
-    .replace("", pd.NA)
-    .dropna()
-    .unique()
-    .tolist()
+    noms = (
+        df[col_found]
+        .dropna()
+        .astype(str)
+        .str.strip()
+        .replace("", pd.NA)
+        .dropna()
+        .unique()
+        .tolist()
 )
-return {
+
+    return {
         "ok": True,
         "nb_lignes": int(len(df)),
         "nb_noms_uniques": int(len(noms)),
         "noms": noms,
 }
+
+
+
 
 
 
