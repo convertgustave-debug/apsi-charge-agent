@@ -1,113 +1,275 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
-from pydantic import BaseModel
-from pathlib import Path
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 import pandas as pd
+import numpy as np
+import io
+from datetime import datetime
 
 app = FastAPI()
 
-# Dossier où on stocke les fichiers uploadés
-UPLOAD_DIR = Path("uploads")
-UPLOAD_DIR.mkdir(exist_ok=True)
+# -----------------------------
+# Paramètres & mappings
+# -----------------------------
+STATUS_COL = "statut de l'opportunité"
+CDP_COL = "cdp mobilier"
+DEADLINE_COL = "date d'échéance du projet"
+CA_COL = "ca potentiel mob"
+TRANSFO_COL = "tx de transfo mob"
+COMPLEX_COL = "complexité du projet"
+SEG_COL = "segmenation mob"  # (oui il y a une typo dans l'export)
+
+# Segmentation -> score
+SEG_MAP = {
+    "stratégique": 4,
+    "strategique": 4,
+    "projet": 3,
+    "réassort": 2,
+    "reassort": 2,
+    "à développer": 1,
+    "a développer": 1,
+    "a developper": 1,
+}
+
+# Transfo -> coeff
+TRANSFO_COEFF = {
+    20: 0.70,
+    40: 0.85,
+    60: 1.00,
+    80: 1.15,
+}
 
 
-class Payload(BaseModel):
-    charge_max: int
+def norm_colname(c: str) -> str:
+    return str(c).strip().lower()
 
 
-@app.get("/")
-def root():
-    return {"status": "ok", "message": "APSI charge agent is running"}
+def urgency_coeff(days_to_deadline: int, horizon: str) -> float:
+    """
+    Coeff urgence selon horizon (1M / 3M / 6M).
+    Plus la deadline est proche, plus le coeff est élevé.
+    """
+    if days_to_deadline is None or np.isnan(days_to_deadline):
+        return 1.0
+
+    d = int(days_to_deadline)
+
+    if horizon == "1M":
+        if d <= 7:
+            return 1.40
+        if d <= 14:
+            return 1.25
+        if d <= 30:
+            return 1.10
+        return 1.0
+
+    if horizon == "3M":
+        if d <= 15:
+            return 1.50
+        if d <= 30:
+            return 1.35
+        if d <= 60:
+            return 1.15
+        if d <= 90:
+            return 1.00
+        return 1.0
+
+    if horizon == "6M":
+        if d <= 30:
+            return 1.45
+        if d <= 60:
+            return 1.30
+        if d <= 120:
+            return 1.10
+        if d <= 180:
+            return 1.00
+        return 1.0
+
+    return 1.0
 
 
+def parse_transfo_to_coeff(v) -> float:
+    """
+    Supporte "20%", "40", 60.0 etc.
+    """
+    s = str(v).replace("%", "").replace(",", ".").strip()
+    try:
+        val = int(float(s))
+    except Exception:
+        return 1.0
+    return TRANSFO_COEFF.get(val, 1.0)
+
+
+def compute_charge_points(df: pd.DataFrame, horizon: str, days_limit: int) -> pd.DataFrame:
+    """
+    Calcule la charge projet pour chaque ligne dans la fenêtre [0..days_limit]
+    Renvoie un df filtré et enrichi.
+    """
+    today = pd.Timestamp(datetime.now().date())
+
+    dfh = df.copy()
+    dfh["days_to_deadline"] = (dfh[DEADLINE_COL] - today).dt.days
+
+    # Garde uniquement les projets dans l'horizon
+    dfh = dfh[
+        (dfh["days_to_deadline"].notna())
+        & (dfh["days_to_deadline"] >= 0)
+        & (dfh["days_to_deadline"] <= days_limit)
+    ].copy()
+
+    # Coeff CA (bonus max +10%)
+    ca_max = dfh["ca"].max() if len(dfh) else 0.0
+    if ca_max <= 0:
+        dfh["ca_coeff"] = 1.0
+    else:
+        dfh["ca_coeff"] = 1.0 + 0.10 * np.minimum(dfh["ca"] / ca_max, 1.0)
+
+    dfh["urgence_coeff"] = dfh["days_to_deadline"].apply(lambda d: urgency_coeff(d, horizon))
+
+    # Score de base = moyenne Complexité & Segmentation
+    dfh["core_score"] = 0.5 * dfh["complexite"] + 0.5 * dfh["seg_score"]
+
+    # Charge projet finale
+    dfh["charge_projet"] = (
+        dfh["core_score"] * dfh["transfo_coeff"] * dfh["urgence_coeff"] * dfh["ca_coeff"]
+    )
+
+    return dfh
+
+
+def summarize_by_cdp(dfh: pd.DataFrame, capacity_points: float) -> pd.DataFrame:
+    """
+    Agrège par CDP Mobilier : nb projets, CA cumulé, charge points, taux charge normalisé.
+    """
+    if len(dfh) == 0:
+        return pd.DataFrame(columns=[
+            "cdp_mobilier",
+            "nb_projets",
+            "ca_cumule",
+            "charge_points",
+            "taux_charge_normalise_pct",
+            "statut_charge",
+        ])
+
+    grp = (
+        dfh.groupby(CDP_COL, dropna=False)
+        .agg(
+            nb_projets=("charge_projet", "count"),
+            ca_cumule=("ca", "sum"),
+            charge_points=("charge_projet", "sum"),
+        )
+        .reset_index()
+        .rename(columns={CDP_COL: "cdp_mobilier"})
+    )
+
+    if capacity_points <= 0:
+        grp["taux_charge_normalise_pct"] = np.nan
+    else:
+        grp["taux_charge_normalise_pct"] = 100.0 * grp["charge_points"] / float(capacity_points)
+
+    def status_label(x: float) -> str:
+        if pd.isna(x):
+            return ""
+        if x < 90:
+            return "OK"
+        if x <= 110:
+            return "Attention"
+        return "Surcharge"
+
+    grp["statut_charge"] = grp["taux_charge_normalise_pct"].apply(status_label)
+    grp = grp.sort_values("taux_charge_normalise_pct", ascending=False)
+
+    return grp
+
+
+# -----------------------------
+# API
+# -----------------------------
 @app.get("/health")
 def health():
     return {"status": "healthy"}
 
 
-@app.post("/set_charge")
-def set_charge(payload: Payload):
-    if payload.charge_max < 0:
-        return {"ok": False, "error": "charge_max must be >= 0"}
-
-    return {"ok": True, "charge_max": payload.charge_max}
-
-
-@app.post("/upload")
-async def upload_file(file: UploadFile = File(...)):
-    """
-    Upload simple : enregistre le fichier dans /uploads et renvoie le chemin.
-    """
-    file_path = UPLOAD_DIR / file.filename
-
-    with open(file_path, "wb") as f:
-        f.write(await file.read())
-
-    return {
-        "ok": True,
-        "filename": file.filename,
-        "saved_as": str(file_path),
-    }
-
-
 @app.post("/process")
-async def process_file(file: UploadFile = File(...)):
+async def process_file(
+    file: UploadFile = File(...),
+    capacity_1m: float = Form(12),
+    capacity_3m: float = Form(25),
+    capacity_6m: float = Form(40),
+):
     """
-    Upload + lecture excel + extraction de la colonne nom.
+    Upload Excel -> filtre devis en cours -> calcule charge par CDP (1M/3M/6M) -> renvoie JSON.
     """
-    # 1) Sauvegarde fichier
-    file_path = UPLOAD_DIR / file.filename
-    with open(file_path, "wb") as f:
-        f.write(await file.read())
 
-    # 2) Lecture Excel
+    content = await file.read()
+
+    # Lecture Excel
     try:
-        df = pd.read_excel(file_path)
+        df = pd.read_excel(io.BytesIO(content))
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Erreur lecture Excel: {str(e)}")
 
-    # 3) Normaliser les noms de colonnes
-    df.columns = [str(c).strip().lower() for c in df.columns]
+    # Normalisation colonnes
+    df.columns = [norm_colname(c) for c in df.columns]
 
-    # 4) Trouver la bonne colonne "nom"
-    possible_cols = [
-        "nom",
-        "nom de l'opportunité",
-        "nom opportunité",
-        "opportunité",
-        "opportunite",  # sans accent au cas où
-    ]
-
-    col_found = None
-    for c in possible_cols:
-        if c in df.columns:
-            col_found = c
-            break
-
-    if col_found is None:
+    # Vérifications colonnes indispensables
+    required_cols = [STATUS_COL, CDP_COL, DEADLINE_COL, CA_COL, TRANSFO_COL]
+    missing = [c for c in required_cols if c not in df.columns]
+    if missing:
         raise HTTPException(
             status_code=400,
-            detail=f"Colonne 'nom' introuvable. Colonnes trouvées: {list(df.columns)}",
+            detail=f"Colonnes manquantes: {missing}. Colonnes trouvées: {list(df.columns)}",
         )
 
-    # 5) Extraire + nettoyer les noms
-    noms = (
-        df[col_found]
-        .dropna()
-        .astype(str)
-        .str.strip()
-        .replace("", pd.NA)
-        .dropna()
-        .unique()
-        .tolist()
-    )
+    # Filtre devis en cours
+    df[STATUS_COL] = df[STATUS_COL].astype(str).str.strip().str.lower()
+    df = df[df[STATUS_COL] == "devis en cours"].copy()
+
+    # Parsing date échéance
+    df[DEADLINE_COL] = pd.to_datetime(df[DEADLINE_COL], dayfirst=True, errors="coerce")
+
+    # CA
+    df["ca"] = pd.to_numeric(df[CA_COL], errors="coerce").fillna(0.0)
+
+    # Complexité (défaut 2 si absent)
+    if COMPLEX_COL in df.columns:
+        df["complexite"] = pd.to_numeric(df[COMPLEX_COL], errors="coerce").fillna(2.0)
+    else:
+        df["complexite"] = 2.0
+
+    # Segmentation (défaut 2 si absent)
+    if SEG_COL in df.columns:
+        seg = df[SEG_COL].astype(str).str.strip().str.lower()
+        df["seg_score"] = seg.map(SEG_MAP).fillna(2.0)
+    else:
+        df["seg_score"] = 2.0
+
+    # Transfo coeff
+    df["transfo_coeff"] = df[TRANSFO_COL].apply(parse_transfo_to_coeff)
+
+    # Infos globales
+    nb_devis = int(len(df))
+    ca_total = float(df["ca"].sum())
+
+    # Horizons
+    horizons = [
+        ("1M", 30, capacity_1m),
+        ("3M", 90, capacity_3m),
+        ("6M", 180, capacity_6m),
+    ]
+
+    results = {}
+    for label, days_limit, cap in horizons:
+        dfh = compute_charge_points(df, horizon=label, days_limit=days_limit)
+        summary = summarize_by_cdp(dfh, capacity_points=cap)
+        results[label] = summary.to_dict(orient="records")
 
     return {
         "ok": True,
-        "colonne_utilisee": col_found,
-        "nb_lignes": int(len(df)),
-        "nb_noms_uniques": int(len(noms)),
-        "noms": noms,
+        "nb_devis_en_cours": nb_devis,
+        "ca_total_devis_en_cours": ca_total,
+        "capacites_points": {"1M": capacity_1m, "3M": capacity_3m, "6M": capacity_6m},
+        "resultats_par_horizon": results,
     }
+
 
 
 
