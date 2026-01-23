@@ -26,17 +26,28 @@ def set_charge(payload: Payload):
         return {"ok": False, "error": "charge_max must be >= 0"}
 
     return {"ok": True, "charge_max": payload.charge_max}
-    from fastapi import UploadFile, File
+
+from fastapi import UploadFile, File
+import os
+from pathlib import Path
+
+UPLOAD_DIR = Path("uploads")
+UPLOAD_DIR.mkdir(exist_ok=True)
 
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
-    content = await file.read()
+    # On enregistre le fichier dans /uploads
+    file_path = UPLOAD_DIR / file.filename
 
-    # Exemple : infos simples sur le fichier reçu
+    with open(file_path, "wb") as f:
+        f.write(await file.read())
+
     return {
+        "ok": True,
         "filename": file.filename,
-        "content_type": file.content_type,
-        "size_bytes": len(content)
+        "saved_as": str(file_path)
     }
+
+
 
 
