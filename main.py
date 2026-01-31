@@ -349,7 +349,7 @@ async def process_file(file: UploadFile = File(...)):
             synthese_par_horizon=charge_par_horizon
     )
 
-        return sanitize_json(payload)
+    return sanitize_json(payload)
 
     # 7) CA max période (pour coeff CA)
     # On prend le max CA dans les projets "devis en cours" (période)
@@ -425,6 +425,7 @@ def download_file(filename: str):
         filename=filename,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
