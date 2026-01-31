@@ -4,6 +4,9 @@ from pathlib import Path
 from datetime import datetime, date
 import pandas as pd
 import numpy as np
+from datetime import date
+from pathlib import Path
+from fastapi.responses import FileResponse
 
 app = FastAPI()
 
@@ -235,6 +238,33 @@ def compute_charge_projet(row, ca_max_periode, horizon_days):
     charge = score * transfo * urg * ca_coeff
     return float(charge)
 
+def export_excel(df_detail, synthese_par_horizon):
+    today = date.today().isoformat()
+    export_dir = Path("exports")
+    export_dir.mkdir(exist_ok=True)
+
+    filename = f"charge_cdp_{today}.xlsx"
+    file_path = export_dir / filename
+
+    synthese_rows = []
+    for horizon, rows in synthese_par_horizon.items():
+        for r in rows:
+            synthese_rows.append({
+                "horizon": horizon,
+                "cdp": r["cdp"],
+                "charge_cdp": r["charge_cdp"],
+                "capacite": r["capacite"],
+                "taux_charge_%": r["taux_charge_%"],
+            })
+
+    df_synthese = pd.DataFrame(synthese_rows)
+
+    with pd.ExcelWriter(file_path, engine="openpyxl") as writer:
+        df_synthese.to_excel(writer, sheet_name="Synthese_CDP", index=False)
+        df_detail.to_excel(writer, sheet_name="Detail_Projets", index=False)
+
+    return filename
+
 
 # =========================================================
 # ENDPOINT PRINCIPAL
@@ -314,6 +344,11 @@ async def process_file(file: UploadFile = File(...)):
                 "6M": CHARGE_CONFIG.charge_max_6m,
             },
         }
+    filename = export_excel(
+            df_detail=df_detail_projets,
+            synthese_par_horizon=charge_par_horizon
+    )
+
         return sanitize_json(payload)
 
     # 7) CA max période (pour coeff CA)
@@ -363,6 +398,7 @@ async def process_file(file: UploadFile = File(...)):
         results_by_horizon[label] = out
 
     payload = {
+        payload["export_file"] = filename
         "ok": True,
         "nb_devis_en_cours": int(len(devis_en_cours)),
         "ca_max_periode": ca_max_periode,
@@ -376,6 +412,19 @@ async def process_file(file: UploadFile = File(...)):
 
     return sanitize_json(payload)
 
+
+@app.get("/download/{filename}")
+def download_file(filename: str):
+    file_path = Path("exports") / filename
+
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Fichier introuvable")
+
+    return FileResponse(
+        path=file_path,
+        filename=filename,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
 
 
