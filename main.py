@@ -344,6 +344,9 @@ async def process_file(file: UploadFile = File(...)):
                 "6M": CHARGE_CONFIG.charge_max_6m,
             },
         }
+    
+    df_detail_projets = df.copy()
+    
     filename = export_excel(
             df_detail=df_detail_projets,
             synthese_par_horizon=charge_par_horizon
@@ -425,6 +428,7 @@ def download_file(filename: str):
         filename=filename,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
