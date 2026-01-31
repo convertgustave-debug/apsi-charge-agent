@@ -398,17 +398,17 @@ async def process_file(file: UploadFile = File(...)):
         results_by_horizon[label] = out
 
     payload = {
-        payload["export_file"] = filename
-        "ok": True,
-        "nb_devis_en_cours": int(len(devis_en_cours)),
-        "ca_max_periode": ca_max_periode,
-        "capacites_points": {
-            "1M": float(CHARGE_CONFIG.charge_max_1m),
-            "3M": float(CHARGE_CONFIG.charge_max_3m),
-            "6M": float(CHARGE_CONFIG.charge_max_6m),
-        },
-        "charge_par_horizon": results_by_horizon,
-    }
+    "export_file": filename,
+    "ok": True,
+    "nb_devis_en_cours": int(len(devis_en_cours)),
+    "ca_max_periode": ca_max_periode,
+    "capacites_points": {
+        "1M": float(CHARGE_CONFIG.charge_max_1m),
+        "3M": float(CHARGE_CONFIG.charge_max_3m),
+        "6M": float(CHARGE_CONFIG.charge_max_6m),
+    },
+    "charge_par_horizon": results_by_horizon,
+}
 
     return sanitize_json(payload)
 
@@ -425,6 +425,7 @@ def download_file(filename: str):
         filename=filename,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
