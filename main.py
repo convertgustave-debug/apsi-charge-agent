@@ -369,7 +369,7 @@ async def process_file(file: UploadFile = File(...)):
         ("6M", 180, float(CHARGE_CONFIG.charge_max_6m)),
     ]
 
-    results_by_horizon = {}
+    charge_by_horizon = {}
 
     for label, horizon_days, cap in horizons:
         tmp = devis_en_cours.copy()
@@ -398,7 +398,7 @@ async def process_file(file: UploadFile = File(...)):
 
         # tri du plus chargé au moins chargé
         out.sort(key=lambda x: x["charge_cdp"], reverse=True)
-        results_by_horizon[label] = out
+        charge_by_horizon[label] = out
 
     payload = {
     "export_file": filename,
@@ -410,7 +410,7 @@ async def process_file(file: UploadFile = File(...)):
         "3M": float(CHARGE_CONFIG.charge_max_3m),
         "6M": float(CHARGE_CONFIG.charge_max_6m),
     },
-    "charge_par_horizon": results_by_horizon,
+    "charge_par_horizon": charge_by_horizon,
 }
 
     return sanitize_json(payload)
@@ -428,6 +428,7 @@ def download_file(filename: str):
         filename=filename,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 
 
 
