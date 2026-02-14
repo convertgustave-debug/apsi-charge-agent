@@ -21,8 +21,6 @@ def upload_to_drive(filepath, filename):
         scopes=["https://www.googleapis.com/auth/drive"]
     )
 
-
-
     service = build("drive", "v3", credentials=credentials)
 
     file_metadata = {
@@ -35,10 +33,12 @@ def upload_to_drive(filepath, filename):
     file = service.files().create(
         body=file_metadata,
         media_body=media,
-        fields="id"
+        fields="id",
+        supportsAllDrives=True
     ).execute()
 
     return file.get("id")
+
 
 
 
@@ -322,6 +322,7 @@ def download(filename: str):
     if not path.exists():
         raise HTTPException(404, "Fichier introuvable")
     return FileResponse(path)
+
 
 
 
