@@ -136,20 +136,61 @@ def compute_charge(row, ca_max, horizon):
 # EXPORT EXCEL
 # =========================================================
 
-def export_excel(df_detail, synthese):
-    fname = f"charge_cdp_{date.today().isoformat()}.xlsx"
-    path = EXPORT_DIR / fname
+def export_excel(df_detail, synthese_par_horizon):
+    today = datetime.now().strftime("%Y-%m-%d_%Hh%M")
 
-    rows = []
-    for h, vals in synthese.items():
-        for v in vals:
-            rows.append({"horizon": h, **v})
+    export_dir = Path("exports")
+    export_dir.mkdir(exist_ok=True)
 
-    with pd.ExcelWriter(path, engine="openpyxl") as writer:
-        pd.DataFrame(rows).to_excel(writer, "Synthese", index=False)
-        df_detail.to_excel(writer, "Detail_Projets", index=False)
+    filename = f"charge_cdp_{today}.xlsx"
+    file_path = export_dir / filename
 
-    return fname
+    # =====================================================
+    # CONSTRUCTION SYNTHÈSE : 1 ligne par CDP
+    # =====================================================
+
+    # dictionnaire final
+    synthese = {}
+
+    for horizon, rows in synthese_par_horizon.items():
+
+        for r in rows:
+
+            cdp = r["cdp"]
+
+            if cdp not in synthese:
+                synthese[cdp] = {"CDP": cdp}
+
+            synthese[cdp][f"Charge {horizon}"] = r["charge_cdp"]
+            synthese[cdp][f"Capacité {horizon}"] = r["capacite"]
+            synthese[cdp][f"Taux {horizon} %"] = r["taux_charge_%"]
+
+    df_synthese = pd.DataFrame(list(synthese.values()))
+
+    # tri optionnel par charge 1M
+    if "Charge 1M" in df_synthese.columns:
+        df_synthese = df_synthese.sort_values("Charge 1M", ascending=False)
+
+    # =====================================================
+    # EXPORT EXCEL
+    # =====================================================
+
+    with pd.ExcelWriter(file_path, engine="openpyxl") as writer:
+
+        df_synthese.to_excel(
+            writer,
+            sheet_name="Synthese_CDP",
+            index=False
+        )
+
+        df_detail.to_excel(
+            writer,
+            sheet_name="Detail_Projets",
+            index=False
+        )
+
+    return filename
+
 
 # =========================================================
 # ENDPOINT PRINCIPAL
@@ -242,3 +283,4 @@ def download(filename: str):
     if not path.exists():
         raise HTTPException(404, "Fichier introuvable")
     return FileResponse(path)
+
