@@ -16,10 +16,11 @@ DRIVE_FOLDER_ID = "1XXcOiXZX80AwsyGFkR1UCY3h9hfThGT4"
 
 def upload_to_drive(filepath, filename):
 
-    Credentials.from_service_account_info(
+    credentials = Credentials.from_service_account_info(
         json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_FILE"]),
         scopes=["https://www.googleapis.com/auth/drive"]
     )
+
 
 
     service = build("drive", "v3", credentials=credentials)
@@ -321,6 +322,7 @@ def download(filename: str):
     if not path.exists():
         raise HTTPException(404, "Fichier introuvable")
     return FileResponse(path)
+
 
 
 
