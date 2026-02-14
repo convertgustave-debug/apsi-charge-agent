@@ -27,7 +27,7 @@ def upload_to_drive(local_file_path, filename):
 
     file_metadata = {
         "name": filename,
-        "parents": [DRIVE_FOLDER_ID],
+        "parents": ["1XXcOiXZX80AwsyGFkR1UCY3h9hfThGT4"],
     }
 
     media = MediaFileUpload(
@@ -324,6 +324,7 @@ def download(filename: str):
     if not path.exists():
         raise HTTPException(404, "Fichier introuvable")
     return FileResponse(path)
+
 
 
 
