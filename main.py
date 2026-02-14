@@ -5,42 +5,6 @@ from pathlib import Path
 from datetime import date, datetime
 import pandas as pd
 import numpy as np
-import os
-import json
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload
-from google.oauth2.service_account import Credentials
-
-# ID du dossier Drive (remplace par ton vrai ID)
-DRIVE_FOLDER_ID = "1XXcOiXZX80AwsyGFkR1UCY3h9hfThGT4"
-
-def upload_to_drive(filepath, filename):
-
-    credentials = Credentials.from_service_account_info(
-        json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_FILE"]),
-        scopes=["https://www.googleapis.com/auth/drive"]
-    )
-
-    service = build("drive", "v3", credentials=credentials)
-
-    file_metadata = {
-        "name": filename,
-        "parents": [DRIVE_FOLDER_ID]
-    }
-
-    media = MediaFileUpload(str(filepath), resumable=True)
-
-    file = service.files().create(
-        body=file_metadata,
-        media_body=media,
-        fields="id",
-        supportsAllDrives=True
-    ).execute()
-
-    return file.get("id")
-
-
-
 
 # =========================================================
 # APP & DOSSIERS
@@ -50,11 +14,12 @@ app = FastAPI()
 
 UPLOAD_DIR = Path("uploads")
 EXPORT_DIR = Path("exports")
+
 UPLOAD_DIR.mkdir(exist_ok=True)
 EXPORT_DIR.mkdir(exist_ok=True)
 
 # =========================================================
-# CONFIG CAPACITÉS
+# CONFIG CAPACITÉS (VALIDÉE)
 # =========================================================
 
 class ChargeConfig(BaseModel):
@@ -68,15 +33,6 @@ CHARGE_CONFIG = ChargeConfig()
 # UTILS
 # =========================================================
 
-def sanitize_json(obj):
-    if isinstance(obj, float) and (np.isnan(obj) or np.isinf(obj)):
-        return None
-    if isinstance(obj, dict):
-        return {k: sanitize_json(v) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [sanitize_json(v) for v in obj]
-    return obj
-
 def normalize_str(x):
     if pd.isna(x):
         return None
@@ -86,7 +42,7 @@ def parse_date_safe(x):
     try:
         d = pd.to_datetime(x, errors="coerce")
         return d.date() if not pd.isna(d) else None
-    except Exception:
+    except:
         return None
 
 def days_until(d):
@@ -95,7 +51,7 @@ def days_until(d):
     return (d - date.today()).days
 
 # =========================================================
-# RÈGLES MÉTIER (VALIDÉES)
+# RÈGLES MÉTIER (STRICTEMENT CELLES VALIDÉES)
 # =========================================================
 
 SEGMENTATION_MAP = {
@@ -110,9 +66,18 @@ SEGMENTATION_MAP = {
 }
 
 TRANSFO_MAP = {
-    20: 0.70, 40: 0.85, 60: 1.00, 80: 1.15,
-    0.2: 0.70, 0.4: 0.85, 0.6: 1.00, 0.8: 1.15,
-    "20%": 0.70, "40%": 0.85, "60%": 1.00, "80%": 1.15,
+    20: 0.70,
+    40: 0.85,
+    60: 1.00,
+    80: 1.15,
+    0.2: 0.70,
+    0.4: 0.85,
+    0.6: 1.00,
+    0.8: 1.15,
+    "20%": 0.70,
+    "40%": 0.85,
+    "60%": 1.00,
+    "80%": 1.15,
 }
 
 AVG_COMPLEXITE = 2.5
@@ -122,8 +87,10 @@ AVG_TRANSFO = 0.925
 def get_complexite(v):
     try:
         v = float(v)
-        return v if 1 <= v <= 4 else AVG_COMPLEXITE
-    except Exception:
+        if 1 <= v <= 4:
+            return v
+        return AVG_COMPLEXITE
+    except:
         return AVG_COMPLEXITE
 
 def get_segmentation(v):
@@ -137,30 +104,65 @@ def get_transfo(v):
     return TRANSFO_MAP.get(v, AVG_TRANSFO)
 
 def coeff_urgence(days_left, horizon):
+
     if days_left is None:
         return 1.0
+
     if days_left < 0:
         return 1.5
 
     if horizon == 30:
-        return 1.4 if days_left <= 7 else 1.25 if days_left <= 14 else 1.1
+        if days_left <= 7:
+            return 1.4
+        elif days_left <= 14:
+            return 1.25
+        else:
+            return 1.1
+
     if horizon == 90:
-        return 1.5 if days_left <= 15 else 1.35 if days_left <= 30 else 1.15 if days_left <= 60 else 1.0
+        if days_left <= 15:
+            return 1.5
+        elif days_left <= 30:
+            return 1.35
+        elif days_left <= 60:
+            return 1.15
+        else:
+            return 1.0
+
     if horizon == 180:
-        return 1.15 if days_left <= 30 else 1.30 if days_left <= 60 else 1.10 if days_left <= 120 else 1.0
+        if days_left <= 30:
+            return 1.15
+        elif days_left <= 60:
+            return 1.30
+        elif days_left <= 120:
+            return 1.10
+        else:
+            return 1.0
 
     return 1.0
 
 def coeff_ca(ca, ca_max):
+
     try:
-        if pd.isna(ca) or ca_max is None or ca_max <= 0:
+
+        if pd.isna(ca):
             return 1.0
+
+        if ca_max is None or ca_max <= 0:
+            return 1.0
+
         return 1 + 0.1 * (float(ca) / ca_max)
-    except Exception:
+
+    except:
         return 1.0
 
 def compute_charge(row, ca_max, horizon):
-    score = 0.5 * get_complexite(row["complexite"]) + 0.5 * get_segmentation(row["segmentation"])
+
+    score = (
+        0.5 * get_complexite(row["complexite"])
+        + 0.5 * get_segmentation(row["segmentation"])
+    )
+
     return (
         score
         * get_transfo(row["transformation"])
@@ -173,19 +175,13 @@ def compute_charge(row, ca_max, horizon):
 # =========================================================
 
 def export_excel(df_detail, synthese_par_horizon):
-    today = datetime.now().strftime("%Y-%m-%d_%Hh%M")
 
-    export_dir = Path("exports")
-    export_dir.mkdir(exist_ok=True)
+    now = datetime.now().strftime("%Y-%m-%d_%Hh%M")
 
-    filename = f"charge_cdp_{today}.xlsx"
-    file_path = export_dir / filename
+    filename = f"charge_cdp_{now}.xlsx"
 
-    # =====================================================
-    # CONSTRUCTION SYNTHÈSE : 1 ligne par CDP
-    # =====================================================
+    file_path = EXPORT_DIR / filename
 
-    # dictionnaire final
     synthese = {}
 
     for horizon, rows in synthese_par_horizon.items():
@@ -203,13 +199,8 @@ def export_excel(df_detail, synthese_par_horizon):
 
     df_synthese = pd.DataFrame(list(synthese.values()))
 
-    # tri optionnel par charge 1M
     if "Charge 1M" in df_synthese.columns:
         df_synthese = df_synthese.sort_values("Charge 1M", ascending=False)
-
-    # =====================================================
-    # EXPORT EXCEL
-    # =====================================================
 
     with pd.ExcelWriter(file_path, engine="openpyxl") as writer:
 
@@ -225,113 +216,131 @@ def export_excel(df_detail, synthese_par_horizon):
             index=False
         )
 
-    return filename
-
+    return file_path
 
 # =========================================================
-# ENDPOINT PRINCIPAL
+# ENDPOINT PRINCIPAL (OPTIMISÉ POUR MAKE)
 # =========================================================
 
 @app.post("/process")
 async def process_file(file: UploadFile = File(...)):
 
-    file_path = UPLOAD_DIR / file.filename
-    with open(file_path, "wb") as f:
-        f.write(await file.read())
+    try:
 
-    df = pd.read_excel(file_path)
-    df.columns = [c.strip().lower() for c in df.columns]
+        input_path = UPLOAD_DIR / file.filename
 
-    # mapping colonnes
-    col_map = {
-        "cdp": ["cdp", "cdp mobilier"],
-        "statut": ["statut de l'opportunité", "statut"],
-        "date_echeance": ["date d'échéance du projet", "échéance"],
-        "complexite": ["complexité", "complexité du projet"],
-        "segmentation": ["segmentation", "segmentation mob"],
-        "transformation": ["tx de transfo", "tx de transfo mob"],
-        "ca": ["ca", "ca potentiel"],
-    }
+        with open(input_path, "wb") as buffer:
+            buffer.write(await file.read())
 
-    def pick(cols):
-        for c in cols:
-            if c in df.columns:
-                return c
-        return None
+        df = pd.read_excel(input_path)
 
-    cols = {k: pick(v) for k, v in col_map.items()}
-    if any(v is None for v in cols.values()):
-        raise HTTPException(400, f"Colonnes manquantes : {cols}")
+        df.columns = [c.strip().lower() for c in df.columns]
 
-    # dataframe MÉTIER UNIQUE
-    work = pd.DataFrame({
-        "cdp": df[cols["cdp"]],
-        "statut": df[cols["statut"]],
-        "date_echeance": df[cols["date_echeance"]].apply(parse_date_safe),
-        "complexite": df[cols["complexite"]],
-        "segmentation": df[cols["segmentation"]],
-        "transformation": df[cols["transformation"]],
-        "ca": df[cols["ca"]],
-    })
+        col_map = {
+            "cdp": ["cdp", "cdp mobilier"],
+            "statut": ["statut de l'opportunité", "statut"],
+            "date_echeance": ["date d'échéance du projet", "échéance"],
+            "complexite": ["complexité", "complexité du projet"],
+            "segmentation": ["segmentation", "segmentation mob"],
+            "transformation": ["tx de transfo", "tx de transfo mob"],
+            "ca": ["ca", "ca potentiel"],
+        }
 
-    work["statut_norm"] = work["statut"].apply(normalize_str)
-    devis = work[work["statut_norm"] == "devis en cours"].copy()
+        def pick(cols):
 
-    ca_max = pd.to_numeric(devis["ca"], errors="coerce").max()
-    ca_max = None if pd.isna(ca_max) else float(ca_max)
+            for c in cols:
 
-    horizons = [
-        ("1M", 30, CHARGE_CONFIG.charge_max_1m),
-        ("3M", 90, CHARGE_CONFIG.charge_max_3m),
-        ("6M", 180, CHARGE_CONFIG.charge_max_6m),
-    ]
+                if c in df.columns:
+                    return c
 
-    result = {}
+            return None
 
-    for label, days, cap in horizons:
-        tmp = devis.copy()
-        tmp["charge_projet"] = tmp.apply(lambda r: compute_charge(r, ca_max, days), axis=1)
+        cols = {k: pick(v) for k, v in col_map.items()}
 
-        agg = tmp.groupby("cdp")["charge_projet"].sum().reset_index()
-        agg["taux_charge_%"] = agg["charge_projet"].apply(lambda x: x / cap * 100)
+        if any(v is None for v in cols.values()):
+            raise HTTPException(400, f"Colonnes manquantes : {cols}")
 
-        result[label] = [
-            {
-                "cdp": r["cdp"],
-                "charge_cdp": float(r["charge_projet"]),
-                "capacite": float(cap),
-                "taux_charge_%": float(r["taux_charge_%"]),
-            }
+        work = pd.DataFrame({
 
-            for _, r in agg.sort_values("charge_projet", ascending=False).iterrows()
+            "cdp": df[cols["cdp"]],
+            "statut": df[cols["statut"]],
+            "date_echeance": df[cols["date_echeance"]].apply(parse_date_safe),
+            "complexite": df[cols["complexite"]],
+            "segmentation": df[cols["segmentation"]],
+            "transformation": df[cols["transformation"]],
+            "ca": df[cols["ca"]],
+
+        })
+
+        work["statut_norm"] = work["statut"].apply(normalize_str)
+
+        devis = work[
+            work["statut_norm"] == "devis en cours"
+        ].copy()
+
+        ca_max = pd.to_numeric(
+            devis["ca"],
+            errors="coerce"
+        ).max()
+
+        ca_max = None if pd.isna(ca_max) else float(ca_max)
+
+        horizons = [
+
+            ("1M", 30, CHARGE_CONFIG.charge_max_1m),
+            ("3M", 90, CHARGE_CONFIG.charge_max_3m),
+            ("6M", 180, CHARGE_CONFIG.charge_max_6m),
+
         ]
 
-    filename = export_excel(devis.copy(), result)
-    file_path = EXPORT_DIR / filename
+        result = {}
 
-    return FileResponse(
-        path=file_path,
-        filename=filename,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+        for label, days, cap in horizons:
 
+            tmp = devis.copy()
 
-@app.get("/download/{filename}")
-def download(filename: str):
-    path = EXPORT_DIR / filename
-    if not path.exists():
-        raise HTTPException(404, "Fichier introuvable")
-    return FileResponse(path)
+            tmp["charge_projet"] = tmp.apply(
+                lambda r: compute_charge(r, ca_max, days),
+                axis=1
+            )
 
+            agg = (
+                tmp.groupby("cdp")["charge_projet"]
+                .sum()
+                .reset_index()
+            )
 
+            agg["taux_charge_%"] = (
+                agg["charge_projet"] / cap * 100
+            )
 
+            result[label] = [
 
+                {
+                    "cdp": r["cdp"],
+                    "charge_cdp": float(r["charge_projet"]),
+                    "capacite": float(cap),
+                    "taux_charge_%": float(r["taux_charge_%"]),
+                }
 
+                for _, r in agg.sort_values(
+                    "charge_projet",
+                    ascending=False
+                ).iterrows()
 
+            ]
 
+        output_path = export_excel(devis, result)
 
+        return FileResponse(
+            path=output_path,
+            filename=output_path.name,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
+    except Exception as e:
 
-
-
-
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
