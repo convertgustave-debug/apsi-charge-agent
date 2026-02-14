@@ -16,7 +16,7 @@ DRIVE_FOLDER_ID = "1XXcOiXZX80AwsyGFkR1UCY3h9hfThGT4"
 
 def upload_to_drive(filepath, filename):
 
-    credentials = service_account.Credentials.from_service_account_file(
+    credentials = Credentials.from_service_account_file(
         os.environ["GOOGLE_SERVICE_ACCOUNT_FILE"],
         scopes=["https://www.googleapis.com/auth/drive"]
     )
@@ -25,10 +25,10 @@ def upload_to_drive(filepath, filename):
 
     file_metadata = {
         "name": filename,
-        "parents": ["1XXcOiXZX80AwsyGFkR1UCY3h9hfThGT4"]
+        "parents": [DRIVE_FOLDER_ID]
     }
 
-    media = MediaFileUpload(filepath, resumable=True)
+    media = MediaFileUpload(str(filepath), resumable=True)
 
     file = service.files().create(
         body=file_metadata,
@@ -37,6 +37,7 @@ def upload_to_drive(filepath, filename):
     ).execute()
 
     return file.get("id")
+
 
 
 # =========================================================
@@ -319,6 +320,7 @@ def download(filename: str):
     if not path.exists():
         raise HTTPException(404, "Fichier introuvable")
     return FileResponse(path)
+
 
 
 
