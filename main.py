@@ -260,12 +260,12 @@ async def process_file(file: UploadFile = File(...)):
         agg["taux_charge_%"] = agg["charge_projet"].apply(lambda x: x / cap * 100)
 
         result[label] = [
-        {
-            "cdp": r["cdp"],
-            "charge_cdp": float(r["charge_projet"]),
-            "capacite": float(cap),
-            "taux_charge_%": float(r["taux_charge_%"]),
-        }
+            {
+                "cdp": r["cdp"],
+                "charge_cdp": float(r["charge_projet"]),
+                "capacite": float(cap),
+                "taux_charge_%": float(r["taux_charge_%"]),
+            }
 
             for _, r in agg.sort_values("charge_projet", ascending=False).iterrows()
         ]
@@ -285,6 +285,7 @@ def download(filename: str):
     if not path.exists():
         raise HTTPException(404, "Fichier introuvable")
     return FileResponse(path)
+
 
 
 
