@@ -5,6 +5,44 @@ from pathlib import Path
 from datetime import date, datetime
 import pandas as pd
 import numpy as np
+import os
+import json
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+from google.oauth2.service_account import Credentials
+
+# ID du dossier Drive (remplace par ton vrai ID)
+DRIVE_FOLDER_ID = "COLLE_ICI_L_ID_DU_DOSSIER"
+
+def upload_to_drive(local_file_path, filename):
+
+    service_account_info = json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
+
+    creds = Credentials.from_service_account_info(
+        service_account_info,
+        scopes=["https://www.googleapis.com/auth/drive"]
+    )
+
+    service = build("drive", "v3", credentials=creds)
+
+    file_metadata = {
+        "name": filename,
+        "parents": [DRIVE_FOLDER_ID],
+    }
+
+    media = MediaFileUpload(
+        local_file_path,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+    file = service.files().create(
+        body=file_metadata,
+        media_body=media,
+        fields="id"
+    ).execute()
+
+    return file["id"]
+
 
 # =========================================================
 # APP & DOSSIERS
@@ -271,6 +309,7 @@ async def process_file(file: UploadFile = File(...)):
         ]
 
     filename = export_excel(devis.copy(), result)
+    upload_to_drive(EXPORT_DIR / filename, filename)
 
     return sanitize_json({
         "ok": True,
@@ -285,6 +324,7 @@ def download(filename: str):
     if not path.exists():
         raise HTTPException(404, "Fichier introuvable")
     return FileResponse(path)
+
 
 
 
