@@ -307,14 +307,14 @@ async def process_file(file: UploadFile = File(...)):
         ]
 
     filename = export_excel(devis.copy(), result)
-    upload_to_drive(EXPORT_DIR / filename, filename)
+    file_path = EXPORT_DIR / filename
 
-    return sanitize_json({
-        "ok": True,
-        "export_file": filename,
-        "nb_devis_en_cours": len(devis),
-        "charge_par_horizon": result,
-    })
+    return FileResponse(
+        path=file_path,
+        filename=filename,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
 
 @app.get("/download/{filename}")
 def download(filename: str):
@@ -322,6 +322,7 @@ def download(filename: str):
     if not path.exists():
         raise HTTPException(404, "Fichier introuvable")
     return FileResponse(path)
+
 
 
 
