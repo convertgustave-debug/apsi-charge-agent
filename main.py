@@ -14,26 +14,21 @@ from google.oauth2.service_account import Credentials
 # ID du dossier Drive (remplace par ton vrai ID)
 DRIVE_FOLDER_ID = "1XXcOiXZX80AwsyGFkR1UCY3h9hfThGT4"
 
-def upload_to_drive(local_file_path, filename):
+def upload_to_drive(filepath, filename):
 
-    service_account_info = json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
-
-    creds = Credentials.from_service_account_info(
-        service_account_info,
+    credentials = service_account.Credentials.from_service_account_file(
+        os.environ["GOOGLE_SERVICE_ACCOUNT_FILE"],
         scopes=["https://www.googleapis.com/auth/drive"]
     )
 
-    service = build("drive", "v3", credentials=creds)
+    service = build("drive", "v3", credentials=credentials)
 
     file_metadata = {
         "name": filename,
-        "parents": ["1XXcOiXZX80AwsyGFkR1UCY3h9hfThGT4"],
+        "parents": ["1XXcOiXZX80AwsyGFkR1UCY3h9hfThGT4"]
     }
 
-    media = MediaFileUpload(
-        local_file_path,
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+    media = MediaFileUpload(filepath, resumable=True)
 
     file = service.files().create(
         body=file_metadata,
@@ -41,7 +36,7 @@ def upload_to_drive(local_file_path, filename):
         fields="id"
     ).execute()
 
-    return file["id"]
+    return file.get("id")
 
 
 # =========================================================
@@ -324,6 +319,7 @@ def download(filename: str):
     if not path.exists():
         raise HTTPException(404, "Fichier introuvable")
     return FileResponse(path)
+
 
 
 
