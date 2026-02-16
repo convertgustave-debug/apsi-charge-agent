@@ -243,7 +243,7 @@ async def process_file(file: UploadFile = File(...)):
             "complexite": ["complexité", "complexité du projet"],
             "segmentation": ["segmentation", "segmentation mob"],
             "transformation": ["tx de transfo", "tx de transfo mob"],
-            "ca": ["ca", "ca potentiel", "CA", "ca potentiel MOB", "CA potentiel MOB"],
+            "ca": ["ca potentiel mob"],
         }
 
         def pick(cols):
@@ -323,10 +323,7 @@ async def process_file(file: UploadFile = File(...)):
                     "taux_charge_%": round(float(r["taux_charge_%"]), 1),
                 }
                 
-                for _, r in agg.sort_values(
-                    "charge_projet",
-                    ascending=False
-                ).iterrows()
+                for _, r in agg.sort_values("charge_projet", ascending=False).iterrows()
 
             ]
 
@@ -344,5 +341,6 @@ async def process_file(file: UploadFile = File(...)):
             status_code=500,
             detail=str(e)
         )
+
 
 
