@@ -318,11 +318,11 @@ async def process_file(file: UploadFile = File(...)):
 
                 {
                     "cdp": r["cdp"],
-                    "charge_cdp": float(r["charge_projet"]),
-                    "capacite": float(cap),
-                    "taux_charge_%": float(r["taux_charge_%"]),
+                    "charge_cdp": round(float(r["charge_projet"]), 1),
+                    "capacite": round(float(cap), 1),
+                    "taux_charge_%": round(float(r["taux_charge_%"]), 1),
                 }
-
+                
                 for _, r in agg.sort_values(
                     "charge_projet",
                     ascending=False
@@ -344,4 +344,5 @@ async def process_file(file: UploadFile = File(...)):
             status_code=500,
             detail=str(e)
         )
+
 
