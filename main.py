@@ -243,7 +243,7 @@ async def process_file(file: UploadFile = File(...)):
             "complexite": ["complexité", "complexité du projet"],
             "segmentation": ["segmentation", "segmentation mob"],
             "transformation": ["tx de transfo", "tx de transfo mob"],
-            "ca": ["ca", "ca potentiel"],
+            "ca": ["ca", "ca potentiel", "CA", "ca potentiel MOB", "CA potentiel MOB"],
         }
 
         def pick(cols):
@@ -344,3 +344,4 @@ async def process_file(file: UploadFile = File(...)):
             status_code=500,
             detail=str(e)
         )
+
