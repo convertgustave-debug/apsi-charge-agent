@@ -228,16 +228,28 @@ def export_excel(df_detail, synthese_par_horizon):
 # ENDPOINT PRINCIPAL (OPTIMISÉ POUR MAKE)
 # =========================================================
 
+import requests
+
 @app.post("/process")
-async def process_file(file: UploadFile = File(...)):
+async def process_file(payload: dict):
 
     try:
+        file_url = payload.get("file_url")
 
-        input_path = UPLOAD_DIR / file.filename
+        if not file_url:
+            raise HTTPException(400, "file_url manquant")
 
-        with open(input_path, "wb") as buffer:
-            buffer.write(await file.read())
+        # Téléchargement du fichier depuis Drive
+        r = requests.get(file_url)
+        if r.status_code != 200:
+            raise HTTPException(400, "Impossible de télécharger le fichier")
 
+        input_path = UPLOAD_DIR / "input.xlsx"
+
+        with open(input_path, "wb") as f:
+            f.write(r.content)
+
+        # IMPORTANT : moteur forcé
         df = pd.read_excel(input_path, engine="openpyxl")
 
         df.columns = [c.strip().lower() for c in df.columns]
@@ -253,12 +265,9 @@ async def process_file(file: UploadFile = File(...)):
         }
 
         def pick(cols):
-
             for c in cols:
-
                 if c in df.columns:
                     return c
-
             return None
 
         cols = {k: pick(v) for k, v in col_map.items()}
@@ -267,7 +276,6 @@ async def process_file(file: UploadFile = File(...)):
             raise HTTPException(400, f"Colonnes manquantes : {cols}")
 
         work = pd.DataFrame({
-
             "cdp": df[cols["cdp"]],
             "statut": df[cols["statut"]],
             "date_echeance": df[cols["date_echeance"]].apply(parse_date_safe),
@@ -275,78 +283,53 @@ async def process_file(file: UploadFile = File(...)):
             "segmentation": df[cols["segmentation"]],
             "transformation": df[cols["transformation"]],
             "ca": df[cols["ca"]],
-
         })
 
         work["statut_norm"] = work["statut"].apply(normalize_str)
 
-        devis = work[
-            work["statut_norm"] == "devis en cours"
-        ].copy()
+        devis = work[work["statut_norm"] == "devis en cours"].copy()
 
-        ca_max = pd.to_numeric(
-            devis["ca"],
-            errors="coerce"
-        ).max()
-
+        ca_max = pd.to_numeric(devis["ca"], errors="coerce").max()
         ca_max = None if pd.isna(ca_max) else float(ca_max)
 
         horizons = [
-
             ("1M", 30, CHARGE_CONFIG.charge_max_1m),
             ("3M", 90, CHARGE_CONFIG.charge_max_3m),
             ("6M", 180, CHARGE_CONFIG.charge_max_6m),
-
         ]
 
         result = {}
 
         for label, days, cap in horizons:
-
             tmp = devis.copy()
-
             tmp["charge_projet"] = tmp.apply(
                 lambda r: compute_charge(r, ca_max, days),
                 axis=1
             )
 
-            agg = (
-                tmp.groupby("cdp")["charge_projet"]
-                .sum()
-                .reset_index()
-            )
-
-            agg["taux_charge_%"] = (
-                agg["charge_projet"] / cap * 100
-            )
+            agg = tmp.groupby("cdp")["charge_projet"].sum().reset_index()
+            agg["taux_charge_%"] = agg["charge_projet"] / cap * 100
 
             result[label] = [
-
                 {
                     "cdp": r["cdp"],
                     "charge_cdp": round(float(r["charge_projet"]), 1),
                     "capacite": round(float(cap), 1),
                     "taux_charge_%": round(float(r["taux_charge_%"]), 1),
                 }
-                
                 for _, r in agg.sort_values("charge_projet", ascending=False).iterrows()
-
             ]
 
         output_path = export_excel(devis, result)
 
-        return FileResponse(
-            path=output_path,
-            filename=output_path.name,
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+        return {
+            "status": "success",
+            "filename": output_path.name
+        }
 
     except Exception as e:
-
-        raise HTTPException(
-            status_code=500,
-            detail=str(e)
-        )
+        raise HTTPException(500, str(e))
+        
 
 
 
