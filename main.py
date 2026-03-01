@@ -179,7 +179,6 @@ def export_excel(df_detail, synthese_par_horizon):
     now = datetime.now().strftime("%Y-%m-%d_%Hh%M")
 
     filename = f"charge_cdp_{now}.xlsx"
-
     file_path = EXPORT_DIR / filename
 
     synthese = {}
@@ -198,10 +197,13 @@ def export_excel(df_detail, synthese_par_horizon):
             synthese[cdp][f"Taux {horizon} %"] = r["taux_charge_%"]
 
     df_synthese = pd.DataFrame(list(synthese.values()))
-    
-    df_synthese = df_synthese.round(1)
-    df_detail = df_detail.round(1)
 
+    # 🔒 Arrondir uniquement les colonnes numériques
+    numeric_cols_synth = df_synthese.select_dtypes(include=[np.number]).columns
+    df_synthese[numeric_cols_synth] = df_synthese[numeric_cols_synth].round(1)
+
+    numeric_cols_detail = df_detail.select_dtypes(include=[np.number]).columns
+    df_detail[numeric_cols_detail] = df_detail[numeric_cols_detail].round(1)
 
     if "Charge 1M" in df_synthese.columns:
         df_synthese = df_synthese.sort_values("Charge 1M", ascending=False)
@@ -345,6 +347,7 @@ async def process_file(file: UploadFile = File(...)):
             status_code=500,
             detail=str(e)
         )
+
 
 
 
