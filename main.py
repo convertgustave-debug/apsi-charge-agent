@@ -245,7 +245,7 @@ async def process_file(file: UploadFile = File(...)):
         col_map = {
             "cdp": ["cdp", "cdp mobilier"],
             "statut": ["statut de l'opportunité", "statut"],
-            "date_echeance": ["date d'échéance du projet", "échéance"],
+            "date_echeance": ["date d'échéance du projet", "échéance", "Echéance Opport Mob"],
             "complexite": ["complexité", "complexité du projet"],
             "segmentation": ["segmentation", "segmentation mob"],
             "transformation": ["tx de transfo", "tx de transfo mob"],
@@ -347,6 +347,7 @@ async def process_file(file: UploadFile = File(...)):
             status_code=500,
             detail=str(e)
         )
+
 
 
 
