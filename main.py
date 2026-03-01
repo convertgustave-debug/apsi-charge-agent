@@ -238,7 +238,7 @@ async def process_file(file: UploadFile = File(...)):
         with open(input_path, "wb") as buffer:
             buffer.write(await file.read())
 
-        df = pd.read_excel(input_path)
+        df = pd.read_excel(input_path, engine="openpyxl")
 
         df.columns = [c.strip().lower() for c in df.columns]
 
@@ -347,6 +347,7 @@ async def process_file(file: UploadFile = File(...)):
             status_code=500,
             detail=str(e)
         )
+
 
 
 
