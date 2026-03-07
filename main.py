@@ -257,7 +257,7 @@ async def process_file(payload: dict):
         col_map = {
             "cdp": ["cdp", "cdp mobilier"],
             "statut": ["statut de l'opportunité", "statut"],
-            "date_echeance": ["date d'échéance du projet", "échéance", "Echéance Opport Mob"],
+            "date_echeance": ["date d'échéance du projet", "échéance", "echéance opport mob"],
             "complexite": ["complexité", "complexité du projet"],
             "segmentation": ["segmentation", "segmentation mob"],
             "transformation": ["tx de transfo", "tx de transfo mob"],
@@ -330,6 +330,7 @@ async def process_file(payload: dict):
     except Exception as e:
         raise HTTPException(500, str(e))
         
+
 
 
 
