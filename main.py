@@ -322,14 +322,15 @@ async def process_file(payload: dict):
 
         output_path = export_excel(devis, result)
 
-        return {
-            "status": "success",
-            "filename": output_path.name
-        }
-
+        return FileResponse(
+            path=output_path,
+            filename=output_path.name,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
     except Exception as e:
         raise HTTPException(500, str(e))
         
+
 
 
 
