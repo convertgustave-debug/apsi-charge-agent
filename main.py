@@ -176,9 +176,9 @@ def compute_charge(row, ca_max, horizon):
 
 def export_excel(df_detail, synthese_par_horizon):
 
-    now = datetime.now().strftime("%Y-%m-%d_%Hh%M")
-
-    filename = f"charge_cdp_{now}.xlsx"
+    today = datetime.now().strftime("%Y-%m-%d")
+    filename = f"Charge_CDP_{today}.xlsx"
+    
     file_path = EXPORT_DIR / filename
 
     synthese = {}
@@ -330,6 +330,7 @@ async def process_file(payload: dict):
     except Exception as e:
         raise HTTPException(500, str(e))
         
+
 
 
 
