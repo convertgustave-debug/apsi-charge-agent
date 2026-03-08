@@ -193,8 +193,7 @@ def export_excel(df_detail, synthese_par_horizon):
                 synthese[cdp] = {"CDP": cdp}
 
             synthese[cdp][f"Charge {horizon}"] = r["charge_cdp"]
-            synthese[cdp][f"Capacité {horizon}"] = r["capacite"]
-            synthese[cdp][f"Taux {horizon} %"] = r["taux_charge_%"]
+            synthese[cdp][f"Taux {horizon}"] = r["taux_charge_%"]
 
     df_synthese = pd.DataFrame(list(synthese.values()))
 
@@ -210,6 +209,22 @@ def export_excel(df_detail, synthese_par_horizon):
 
     with pd.ExcelWriter(file_path, engine="openpyxl") as writer:
 
+        capacite_row = {
+            "CDP": "Capacité max",
+            "Charge 1M": "60 pts",
+            "Taux 1M": "",
+            "Charge 3M": "130 pts",
+            "Taux 3M": "",
+            "Charge 6M": "210 pts",
+            "Taux 6M": ""
+        }
+
+        df_synthese = pd.concat(
+            [df_synthese, pd.DataFrame([capacite_row])],
+            ignore_index=True
+        )
+        df_synthese = df_synthese.sort_values("Charge 1M", ascending=False)
+        
         df_synthese.to_excel(
             writer,
             sheet_name="Synthese_CDP",
@@ -312,11 +327,10 @@ async def process_file(payload: dict):
 
             result[label] = [
                 {
-                    "cdp": r["cdp"],
-                    "charge_cdp": round(float(r["charge_projet"]), 1),
-                    "capacite": round(float(cap), 1),
-                    "taux_charge_%": round(float(r["taux_charge_%"]), 1),
-                }
+            "cdp": r["cdp"],
+            "charge_cdp": f"{round(float(r['charge_projet']),1)} pts",
+            "taux_charge_%": f"{round(float(r['taux_charge_%']),1)} %",
+        }
                 for _, r in agg.sort_values("charge_projet", ascending=False).iterrows()
             ]
 
@@ -330,6 +344,7 @@ async def process_file(payload: dict):
     except Exception as e:
         raise HTTPException(500, str(e))
         
+
 
 
 
