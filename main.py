@@ -243,7 +243,7 @@ def export_excel(df_detail, synthese_par_horizon):
         orange_fill = PatternFill(start_color="FFD966", end_color="FFD966", fill_type="solid")
         red_fill = PatternFill(start_color="F4CCCC", end_color="F4CCCC", fill_type="solid")
 
-        for row in range(2, worksheet.max_row):
+        for row in range(2, worksheet.max_row + 1):
 
             for col in [3,5,7]:  # colonnes Taux
 
@@ -261,8 +261,12 @@ def export_excel(df_detail, synthese_par_horizon):
 
                 except:
                     pass
+                    
+        grey_fill = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
 
-        worksheet.freeze_panes = "A2"
+        for col in range(1, 8):
+            worksheet.cell(row=worksheet.max_row, column=col).fill = grey_fill
+                worksheet.freeze_panes = "A2"
         
         df_detail.to_excel(
             writer,
@@ -377,6 +381,7 @@ async def process_file(payload: dict):
     except Exception as e:
         raise HTTPException(500, str(e))
         
+
 
 
 
