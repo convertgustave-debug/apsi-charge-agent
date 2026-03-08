@@ -240,6 +240,15 @@ def export_excel(df_detail, synthese_par_horizon):
             index=False
         )
         worksheet = writer.sheets["Synthese_CDP"]
+
+        for row in range(2, worksheet.max_row):
+            worksheet.cell(row=row, column=2).number_format = '0.0 "pts"'
+            worksheet.cell(row=row, column=4).number_format = '0.0 "pts"'
+            worksheet.cell(row=row, column=6).number_format = '0.0 "pts"'
+
+            worksheet.cell(row=row, column=3).number_format = '0.0"%"'
+            worksheet.cell(row=row, column=5).number_format = '0.0"%"'
+            worksheet.cell(row=row, column=7).number_format = '0.0"%"'
         
         chart = BarChart()
         chart.title = "Charge CDP - Horizon 1M"
@@ -463,8 +472,8 @@ async def process_file(payload: dict):
             result[label] = [
                 {
             "cdp": r["cdp"],
-            "charge_cdp": f"{round(float(r['charge_projet']),1)} pts",
-            "taux_charge_%": f"{round(float(r['taux_charge_%']),1)} %",
+            "charge_cdp": round(float(r["charge_projet"]),1),
+            "taux_charge_%": round(float(r["taux_charge_%"]),1),
         }
                 for _, r in agg.sort_values("charge_projet", ascending=False).iterrows()
             ]
@@ -479,6 +488,7 @@ async def process_file(payload: dict):
     except Exception as e:
         raise HTTPException(500, str(e))
         
+
 
 
 
