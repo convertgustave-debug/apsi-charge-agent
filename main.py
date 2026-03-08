@@ -273,7 +273,7 @@ def export_excel(df_detail, synthese_par_horizon):
         chart.add_data(data, titles_from_data=True)
         chart.set_categories(cats)
 
-        worksheet.add_chart(chart, "M2")
+        worksheet.add_chart(chart, "H20")
 
 
         chart4 = BarChart()
@@ -323,7 +323,7 @@ def export_excel(df_detail, synthese_par_horizon):
 
         chart2.set_categories(cats)
 
-        worksheet.add_chart(chart2, "M17")
+        worksheet.add_chart(chart2, "M2")
 
         surcharge_rows = []
 
@@ -361,7 +361,7 @@ def export_excel(df_detail, synthese_par_horizon):
             chart3.add_data(data, titles_from_data=False)
             chart3.set_categories(cats)
 
-            worksheet.add_chart(chart3, "J30")
+            worksheet.add_chart(chart3, "M13")
 
         green_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
         orange_fill = PatternFill(start_color="FFD966", end_color="FFD966", fill_type="solid")
@@ -505,6 +505,7 @@ async def process_file(payload: dict):
 
     except Exception as e:
         raise HTTPException(500, str(e))
+
 
 
 
