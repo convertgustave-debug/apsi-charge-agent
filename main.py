@@ -232,11 +232,23 @@ def export_excel(df_detail, synthese_par_horizon):
         worksheet = writer.sheets["Synthese_CDP"]
 
         # Colonne capacité restante (calculée dans Excel)
-        worksheet.cell(row=1, column=8).value = "Capacité restante 1M"
+        worksheet.cell(row=1, column=9).value = "Capacité restante 1M"
 
         for row in range(2, worksheet.max_row):
-            charge_cell = f"B{row}"
-            worksheet.cell(row=row, column=8).value = f"=60-{charge_cell}"
+            taux1M = f"C{row}"
+            worksheet.cell(row=row, column=9).value = f"=100-{taux1M}"
+
+        worksheet.cell(row=1, column=9).value = "Capacité restante 3M"
+
+        for row in range(2, worksheet.max_row):
+            taux3M = f"E{row}"
+            worksheet.cell(row=row, column=9).value = f"=100-{taux3M}"
+
+        worksheet.cell(row=1, column=10).value = "Capacité restante 3M"
+
+        for row in range(2, worksheet.max_row):
+            taux6M = f"G{row}"
+            worksheet.cell(row=row, column=10).value = f"=100-{taux6M}"
 
         for row in range(2, worksheet.max_row):
             worksheet.cell(row=row, column=2).number_format = '0.0 "pts"'
@@ -246,6 +258,9 @@ def export_excel(df_detail, synthese_par_horizon):
             worksheet.cell(row=row, column=3).number_format = '0.0"%"'
             worksheet.cell(row=row, column=5).number_format = '0.0"%"'
             worksheet.cell(row=row, column=7).number_format = '0.0"%"'
+            worksheet.cell(row=row, column=8).number_format = '0.0"%"'
+            worksheet.cell(row=row, column=9).number_format = '0.0"%"'
+            worksheet.cell(row=row, column=10).number_format = '0.0"%"'
 
         chart = BarChart()
         chart.title = "Charge CDP - Horizon 1M"
@@ -286,6 +301,7 @@ def export_excel(df_detail, synthese_par_horizon):
         worksheet.add_chart(chart4, "B20")
 
         chart2 = BarChart()
+        chart2.style = 10
         chart2.title = "Comparaison des taux de charge"
         chart2.y_axis.title = "%"
         chart2.x_axis.title = "CDP"
@@ -300,9 +316,14 @@ def export_excel(df_detail, synthese_par_horizon):
         chart2.add_data(data2, titles_from_data=True)
         chart2.add_data(data3, titles_from_data=True)
 
+        # Couleurs des séries
+        chart2.series[0].graphicalProperties.solidFill = "FF4C4C"  # rouge 1M
+        chart2.series[1].graphicalProperties.solidFill = "FFA500"  # orange 3M
+        chart2.series[2].graphicalProperties.solidFill = "4CAF50"  # vert 6M
+
         chart2.set_categories(cats)
 
-        worksheet.add_chart(chart2, "J16")
+        worksheet.add_chart(chart2, "J17")
 
         surcharge_rows = []
 
@@ -340,7 +361,7 @@ def export_excel(df_detail, synthese_par_horizon):
             chart3.add_data(data, titles_from_data=False)
             chart3.set_categories(cats)
 
-            worksheet.add_chart(chart3, "J29")
+            worksheet.add_chart(chart3, "J30")
 
         green_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
         orange_fill = PatternFill(start_color="FFD966", end_color="FFD966", fill_type="solid")
@@ -484,6 +505,7 @@ async def process_file(payload: dict):
 
     except Exception as e:
         raise HTTPException(500, str(e))
+
 
 
 
