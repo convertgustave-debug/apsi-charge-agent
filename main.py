@@ -244,7 +244,7 @@ def export_excel(df_detail, synthese_par_horizon):
             taux3M = f"E{row}"
             worksheet.cell(row=row, column=9).value = f"=100-{taux3M}"
 
-        worksheet.cell(row=1, column=10).value = "Capacité restante 3M"
+        worksheet.cell(row=1, column=10).value = "Capacité restante 6M"
 
         for row in range(2, worksheet.max_row):
             taux6M = f"G{row}"
@@ -505,6 +505,7 @@ async def process_file(payload: dict):
 
     except Exception as e:
         raise HTTPException(500, str(e))
+
 
 
 
