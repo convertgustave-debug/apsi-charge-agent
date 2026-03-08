@@ -232,11 +232,11 @@ def export_excel(df_detail, synthese_par_horizon):
         worksheet = writer.sheets["Synthese_CDP"]
 
         # Colonne capacité restante (calculée dans Excel)
-        worksheet.cell(row=1, column=9).value = "Capacité restante 1M"
+        worksheet.cell(row=1, column=8).value = "Capacité restante 1M"
 
         for row in range(2, worksheet.max_row):
             taux1M = f"C{row}"
-            worksheet.cell(row=row, column=9).value = f"=100-{taux1M}"
+            worksheet.cell(row=row, column=8).value = f"=100-{taux1M}"
 
         worksheet.cell(row=1, column=9).value = "Capacité restante 3M"
 
@@ -273,7 +273,7 @@ def export_excel(df_detail, synthese_par_horizon):
         chart.add_data(data, titles_from_data=True)
         chart.set_categories(cats)
 
-        worksheet.add_chart(chart, "K2")
+        worksheet.add_chart(chart, "M2")
 
 
         chart4 = BarChart()
@@ -323,7 +323,7 @@ def export_excel(df_detail, synthese_par_horizon):
 
         chart2.set_categories(cats)
 
-        worksheet.add_chart(chart2, "K17")
+        worksheet.add_chart(chart2, "M17")
 
         surcharge_rows = []
 
@@ -505,6 +505,7 @@ async def process_file(payload: dict):
 
     except Exception as e:
         raise HTTPException(500, str(e))
+
 
 
 
