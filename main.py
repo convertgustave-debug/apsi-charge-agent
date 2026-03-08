@@ -6,6 +6,8 @@ from datetime import date, datetime
 import pandas as pd
 import numpy as np
 from openpyxl.styles import PatternFill
+from openpyxl.chart import BarChart, Reference
+
 # =========================================================
 # APP & DOSSIERS
 # =========================================================
@@ -238,6 +240,101 @@ def export_excel(df_detail, synthese_par_horizon):
             index=False
         )
         worksheet = writer.sheets["Synthese_CDP"]
+        
+        chart = BarChart()
+        chart.title = "Charge CDP - Horizon 1M"
+        chart.y_axis.title = "Points de charge"
+        chart.x_axis.title = "CDP"
+
+        data = Reference(
+            worksheet,
+            min_col=2,
+            min_row=1,
+            max_row=worksheet.max_row-1
+        )
+
+        cats = Reference(
+            worksheet,
+            min_col=1,
+            min_row=2,
+            max_row=worksheet.max_row-1
+        )
+
+        chart.add_data(data, titles_from_data=True)
+        chart.set_categories(cats)
+
+        worksheet.add_chart(chart, "I2")
+
+        chart2 = BarChart()
+        chart2.title = "Comparaison des charges"
+        chart2.y_axis.title = "Points"
+
+        data = Reference(
+            worksheet,
+            min_col=2,
+            max_col=6,
+            min_row=1,
+            max_row=worksheet.max_row-1
+        )
+
+        cats = Reference(
+            worksheet,
+            min_col=1,
+            min_row=2,
+            max_row=worksheet.max_row-1
+        )
+
+        chart2.add_data(data, titles_from_data=True)
+        chart2.set_categories(cats)
+
+        worksheet.add_chart(chart2, "I20")
+
+        # ---------------------------------
+        # Graphique surcharge (>100%)
+        # ---------------------------------
+
+        surcharge_rows = []
+
+        for row in range(2, worksheet.max_row):
+
+            taux_cell = worksheet.cell(row=row, column=3).value
+
+            try:
+                taux = float(str(taux_cell).replace("%","").strip())
+
+                if taux > 100:
+                    surcharge_rows.append(row)
+
+            except:
+                pass
+
+
+        if surcharge_rows:
+
+            chart3 = BarChart()
+            chart3.title = "CDP en surcharge (>100%)"
+            chart3.y_axis.title = "Taux de charge (%)"
+            chart3.x_axis.title = "CDP"
+
+            data = Reference(
+                worksheet,
+                min_col=3,
+                min_row=min(surcharge_rows),
+                max_row=max(surcharge_rows)
+            )
+
+            cats = Reference(
+                worksheet,
+                min_col=1,
+                min_row=min(surcharge_rows),
+                max_row=max(surcharge_rows)
+            )
+
+            chart3.add_data(data, titles_from_data=False)
+            chart3.set_categories(cats)
+
+            worksheet.add_chart(chart3, "I38")
+            
 
         green_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
         orange_fill = PatternFill(start_color="FFD966", end_color="FFD966", fill_type="solid")
@@ -382,6 +479,7 @@ async def process_file(payload: dict):
     except Exception as e:
         raise HTTPException(500, str(e))
         
+
 
 
 
