@@ -214,7 +214,6 @@ def export_excel(df_detail, synthese_par_horizon):
         df_synthese = pd.DataFrame(list(synthese.values()))
 
         # tri par charge 1M
-        df_synthese["Charge 1M_num"] = df_synthese["Charge 1M"].str.replace(" pts","").astype(float)
         df_synthese = df_synthese.sort_values("Charge 1M_num", ascending=False)
         df_synthese = df_synthese.drop(columns=["Charge 1M_num"])
        
@@ -239,6 +238,13 @@ def export_excel(df_detail, synthese_par_horizon):
             sheet_name="Synthese_CDP",
             index=False
         )
+
+        df_detail.to_excel(
+            writer,
+            sheet_name="Detail_Projets",
+            index=False
+        )
+        
         worksheet = writer.sheets["Synthese_CDP"]
 
         for row in range(2, worksheet.max_row):
@@ -309,7 +315,7 @@ def export_excel(df_detail, synthese_par_horizon):
             taux_cell = worksheet.cell(row=row, column=3).value
 
             try:
-                taux = float(str(taux_cell).replace("%","").strip())
+                taux = float(taux_cell)
 
                 if taux > 100:
                     surcharge_rows.append(row)
@@ -349,7 +355,7 @@ def export_excel(df_detail, synthese_par_horizon):
         orange_fill = PatternFill(start_color="FFD966", end_color="FFD966", fill_type="solid")
         red_fill = PatternFill(start_color="F4CCCC", end_color="F4CCCC", fill_type="solid")
 
-        for row in range(2, worksheet.max_row + 1):
+        for row in range(2, worksheet.max_row):
 
             for col in [3,5,7]:  # colonnes Taux
 
@@ -374,12 +380,10 @@ def export_excel(df_detail, synthese_par_horizon):
             worksheet.cell(row=worksheet.max_row, column=col).fill = grey_fill
                
         worksheet.freeze_panes = "A2"
-        
-        df_detail.to_excel(
-            writer,
-            sheet_name="Detail_Projets",
-            index=False
-        )
+
+        for column_cells in worksheet.columns:
+            length = max(len(str(cell.value)) if cell.value else 0 for cell in column_cells)
+            worksheet.column_dimensions[column_cells[0].column_letter].width = min(length + 2, 25)
 
     return file_path
 
@@ -488,6 +492,7 @@ async def process_file(payload: dict):
     except Exception as e:
         raise HTTPException(500, str(e))
         
+
 
 
 
