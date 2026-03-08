@@ -231,6 +231,13 @@ def export_excel(df_detail, synthese_par_horizon):
 
         worksheet = writer.sheets["Synthese_CDP"]
 
+        # Colonne capacité restante (calculée dans Excel)
+        worksheet.cell(row=1, column=8).value = "Capacité restante 1M"
+
+        for row in range(2, worksheet.max_row):
+            charge_cell = f"B{row}"
+            worksheet.cell(row=row, column=8).value = f"=60-{charge_cell}"
+
         for row in range(2, worksheet.max_row):
             worksheet.cell(row=row, column=2).number_format = '0.0 "pts"'
             worksheet.cell(row=row, column=4).number_format = '0.0 "pts"'
@@ -251,7 +258,32 @@ def export_excel(df_detail, synthese_par_horizon):
         chart.add_data(data, titles_from_data=True)
         chart.set_categories(cats)
 
-        worksheet.add_chart(chart, "I2")
+        worksheet.add_chart(chart, "J2")
+
+
+        chart4 = BarChart()
+        chart4.title = "Capacité restante par CDP (1M)"
+        chart4.y_axis.title = "Points disponibles"
+        chart4.x_axis.title = "CDP"
+
+        data = Reference(
+        worksheet,
+         min_col=8,
+            min_row=1,
+            max_row=worksheet.max_row-1
+        )
+
+        cats = Reference(
+            worksheet,
+            min_col=1,
+            min_row=2,
+            max_row=worksheet.max_row-1
+        )
+
+        chart4.add_data(data, titles_from_data=True)
+        chart4.set_categories(cats)
+
+        worksheet.add_chart(chart4, "B20")
 
         chart2 = BarChart()
         chart2.title = "Comparaison des charges"
@@ -276,7 +308,7 @@ def export_excel(df_detail, synthese_par_horizon):
         chart2.add_data(data, titles_from_data=True)
         chart2.set_categories(cats)
 
-        worksheet.add_chart(chart2, "I20")
+        worksheet.add_chart(chart2, "J15")
 
         surcharge_rows = []
 
@@ -314,7 +346,7 @@ def export_excel(df_detail, synthese_par_horizon):
             chart3.add_data(data, titles_from_data=False)
             chart3.set_categories(cats)
 
-            worksheet.add_chart(chart3, "I38")
+            worksheet.add_chart(chart3, "J28")
 
         green_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
         orange_fill = PatternFill(start_color="FFD966", end_color="FFD966", fill_type="solid")
@@ -458,6 +490,7 @@ async def process_file(payload: dict):
 
     except Exception as e:
         raise HTTPException(500, str(e))
+
 
 
 
