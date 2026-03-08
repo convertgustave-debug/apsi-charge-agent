@@ -253,6 +253,69 @@ def export_excel(df_detail, synthese_par_horizon):
 
         worksheet.add_chart(chart, "I2")
 
+        chart2 = BarChart()
+        chart2.title = "Comparaison des charges"
+        chart2.y_axis.title = "Points"
+        chart2.x_axis.title = "CDP"
+
+        data = Reference(
+            worksheet,
+            min_col=2,
+            max_col=6,
+            min_row=1,
+            max_row=worksheet.max_row-1
+        )
+
+        cats = Reference(
+            worksheet,
+            min_col=1,
+            min_row=2,
+            max_row=worksheet.max_row-1
+        )
+
+        chart2.add_data(data, titles_from_data=True)
+        chart2.set_categories(cats)
+
+        worksheet.add_chart(chart2, "I20")
+
+        surcharge_rows = []
+
+        for row in range(2, worksheet.max_row):
+
+            taux = worksheet.cell(row=row, column=3).value
+
+            try:
+                if taux > 100:
+                    surcharge_rows.append(row)
+            except:
+                pass
+
+        if surcharge_rows:
+
+            chart3 = BarChart()
+            chart3.title = "CDP en surcharge (>100%)"
+            chart3.y_axis.title = "%"
+            chart3.x_axis.title = "CDP"
+
+            data = Reference(
+                worksheet,
+                min_col=3,
+                min_row=min(surcharge_rows),
+                max_row=max(surcharge_rows)
+            )
+
+            cats = Reference(
+                worksheet,
+                min_col=1,
+                min_row=min(surcharge_rows),
+                max_row=max(surcharge_rows)
+            )
+
+            chart3.add_data(data, titles_from_data=False)
+            chart3.set_categories(cats)
+
+            worksheet.add_chart(chart3, "I38")
+
         green_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
         orange_fill = PatternFill(start_color="FFD966", end_color="FFD966", fill_type="solid")
         red_fill = PatternFill(start_color="F4CCCC", end_color="F4CCCC", fill_type="solid")
@@ -395,6 +458,7 @@ async def process_file(payload: dict):
 
     except Exception as e:
         raise HTTPException(500, str(e))
+
 
 
 
