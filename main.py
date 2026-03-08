@@ -266,7 +266,8 @@ def export_excel(df_detail, synthese_par_horizon):
 
         for col in range(1, 8):
             worksheet.cell(row=worksheet.max_row, column=col).fill = grey_fill
-                worksheet.freeze_panes = "A2"
+               
+        worksheet.freeze_panes = "A2"
         
         df_detail.to_excel(
             writer,
@@ -381,6 +382,7 @@ async def process_file(payload: dict):
     except Exception as e:
         raise HTTPException(500, str(e))
         
+
 
 
 
