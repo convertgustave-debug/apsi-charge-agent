@@ -209,6 +209,13 @@ def export_excel(df_detail, synthese_par_horizon):
 
     with pd.ExcelWriter(file_path, engine="openpyxl") as writer:
 
+        df_synthese = pd.DataFrame(list(synthese.values()))
+
+        # tri par charge 1M
+        df_synthese["Charge 1M_num"] = df_synthese["Charge 1M"].str.replace(" pts","").astype(float)
+        df_synthese = df_synthese.sort_values("Charge 1M_num", ascending=False)
+        df_synthese = df_synthese.drop(columns=["Charge 1M_num"])
+       
         capacite_row = {
             "CDP": "Capacité max",
             "Charge 1M": "60 pts",
@@ -223,7 +230,7 @@ def export_excel(df_detail, synthese_par_horizon):
             [df_synthese, pd.DataFrame([capacite_row])],
             ignore_index=True
         )
-        df_synthese = df_synthese.sort_values("Charge 1M", ascending=False)
+        
         
         df_synthese.to_excel(
             writer,
@@ -370,6 +377,7 @@ async def process_file(payload: dict):
     except Exception as e:
         raise HTTPException(500, str(e))
         
+
 
 
 
