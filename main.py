@@ -300,6 +300,58 @@ def export_excel(df_detail, synthese_par_horizon):
 
         worksheet.add_chart(chart4, "B20")
 
+        chart6 = BarChart()
+        chart6.title = "Capacité restante par CDP (3M)"
+        chart6.y_axis.title = "Points disponibles (%)"
+        chart6.x_axis.title = "CDP"
+
+        data = Reference(
+            worksheet,
+            min_col=9,   # colonne Capacité restante 3M
+            min_row=1,
+            max_row=worksheet.max_row-1
+        )
+
+        cats = Reference(
+            worksheet,
+            min_col=1,
+            min_row=2,
+            max_row=worksheet.max_row-1
+        )
+
+        chart6.add_data(data, titles_from_data=True)
+        chart6.set_categories(cats)
+
+        worksheet.add_chart(chart6, "B35")
+
+        chart5 = BarChart()
+        chart5.title = "Capacité restante par CDP (6M)"
+        chart5.y_axis.title = "Points disponibles (%)"
+        chart5.x_axis.title = "CDP"
+
+        data = Reference(
+            worksheet,
+            min_col=10,   # colonne Capacité restante 6M
+            min_row=1,
+            max_row=worksheet.max_row-1
+        )
+
+        cats = Reference(
+            worksheet,
+            min_col=1,
+            min_row=2,
+            max_row=worksheet.max_row-1
+        )
+
+        chart5.add_data(data, titles_from_data=True)
+        chart5.set_categories(cats)
+
+        worksheet.add_chart(chart5, "B50")
+
+        chart4.y_axis.scaling.min = 0
+        chart5.y_axis.scaling.min = 0
+        chart6.y_axis.scaling.min = 0
+
         chart2 = BarChart()
         chart2.style = 10
         chart2.title = "Comparaison des taux de charge"
@@ -505,6 +557,7 @@ async def process_file(payload: dict):
 
     except Exception as e:
         raise HTTPException(500, str(e))
+
 
 
 
