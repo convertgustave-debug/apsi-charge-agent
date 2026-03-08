@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 from openpyxl.styles import PatternFill
 from openpyxl.chart import BarChart, Reference
+import requests
 
 # =========================================================
 # APP & DOSSIERS
@@ -21,7 +22,7 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 EXPORT_DIR.mkdir(exist_ok=True)
 
 # =========================================================
-# CONFIG CAPACITÉS (VALIDÉE)
+# CONFIG CAPACITÉS
 # =========================================================
 
 class ChargeConfig(BaseModel):
@@ -53,7 +54,7 @@ def days_until(d):
     return (d - date.today()).days
 
 # =========================================================
-# RÈGLES MÉTIER (STRICTEMENT CELLES VALIDÉES)
+# REGLES METIER
 # =========================================================
 
 SEGMENTATION_MAP = {
@@ -180,7 +181,7 @@ def export_excel(df_detail, synthese_par_horizon):
 
     today = datetime.now().strftime("%Y-%m-%d")
     filename = f"Charge_CDP_{today}.xlsx"
-    
+
     file_path = EXPORT_DIR / filename
 
     synthese = {}
@@ -199,7 +200,6 @@ def export_excel(df_detail, synthese_par_horizon):
 
     df_synthese = pd.DataFrame(list(synthese.values()))
 
-    # 🔒 Arrondir uniquement les colonnes numériques
     numeric_cols_synth = df_synthese.select_dtypes(include=[np.number]).columns
     df_synthese[numeric_cols_synth] = df_synthese[numeric_cols_synth].round(1)
 
@@ -211,40 +211,24 @@ def export_excel(df_detail, synthese_par_horizon):
 
     with pd.ExcelWriter(file_path, engine="openpyxl") as writer:
 
-        df_synthese = pd.DataFrame(list(synthese.values()))
-
-        # tri par charge 1M
-        df_synthese = df_synthese.sort_values("Charge 1M_num", ascending=False)
-        df_synthese = df_synthese.drop(columns=["Charge 1M_num"])
-       
         capacite_row = {
             "CDP": "Capacité max",
-            "Charge 1M": "60 pts",
-            "Taux 1M": "",
-            "Charge 3M": "130 pts",
-            "Taux 3M": "",
-            "Charge 6M": "210 pts",
-            "Taux 6M": ""
+            "Charge 1M": 60,
+            "Taux 1M": None,
+            "Charge 3M": 130,
+            "Taux 3M": None,
+            "Charge 6M": 210,
+            "Taux 6M": None
         }
 
         df_synthese = pd.concat(
             [df_synthese, pd.DataFrame([capacite_row])],
             ignore_index=True
         )
-        
-        
-        df_synthese.to_excel(
-            writer,
-            sheet_name="Synthese_CDP",
-            index=False
-        )
 
-        df_detail.to_excel(
-            writer,
-            sheet_name="Detail_Projets",
-            index=False
-        )
-        
+        df_synthese.to_excel(writer, sheet_name="Synthese_CDP", index=False)
+        df_detail.to_excel(writer, sheet_name="Detail_Projets", index=False)
+
         worksheet = writer.sheets["Synthese_CDP"]
 
         for row in range(2, worksheet.max_row):
@@ -255,101 +239,19 @@ def export_excel(df_detail, synthese_par_horizon):
             worksheet.cell(row=row, column=3).number_format = '0.0"%"'
             worksheet.cell(row=row, column=5).number_format = '0.0"%"'
             worksheet.cell(row=row, column=7).number_format = '0.0"%"'
-        
+
         chart = BarChart()
         chart.title = "Charge CDP - Horizon 1M"
         chart.y_axis.title = "Points de charge"
         chart.x_axis.title = "CDP"
 
-        data = Reference(
-            worksheet,
-            min_col=2,
-            min_row=1,
-            max_row=worksheet.max_row-1
-        )
-
-        cats = Reference(
-            worksheet,
-            min_col=1,
-            min_row=2,
-            max_row=worksheet.max_row-1
-        )
+        data = Reference(worksheet, min_col=2, min_row=1, max_row=worksheet.max_row-1)
+        cats = Reference(worksheet, min_col=1, min_row=2, max_row=worksheet.max_row-1)
 
         chart.add_data(data, titles_from_data=True)
         chart.set_categories(cats)
 
         worksheet.add_chart(chart, "I2")
-
-        chart2 = BarChart()
-        chart2.title = "Comparaison des charges"
-        chart2.y_axis.title = "Points"
-
-        data = Reference(
-            worksheet,
-            min_col=2,
-            max_col=6,
-            min_row=1,
-            max_row=worksheet.max_row-1
-        )
-
-        cats = Reference(
-            worksheet,
-            min_col=1,
-            min_row=2,
-            max_row=worksheet.max_row-1
-        )
-
-        chart2.add_data(data, titles_from_data=True)
-        chart2.set_categories(cats)
-
-        worksheet.add_chart(chart2, "I20")
-
-        # ---------------------------------
-        # Graphique surcharge (>100%)
-        # ---------------------------------
-
-        surcharge_rows = []
-
-        for row in range(2, worksheet.max_row):
-
-            taux_cell = worksheet.cell(row=row, column=3).value
-
-            try:
-                taux = float(taux_cell)
-
-                if taux > 100:
-                    surcharge_rows.append(row)
-
-            except:
-                pass
-
-
-        if surcharge_rows:
-
-            chart3 = BarChart()
-            chart3.title = "CDP en surcharge (>100%)"
-            chart3.y_axis.title = "Taux de charge (%)"
-            chart3.x_axis.title = "CDP"
-
-            data = Reference(
-                worksheet,
-                min_col=3,
-                min_row=min(surcharge_rows),
-                max_row=max(surcharge_rows)
-            )
-
-            cats = Reference(
-                worksheet,
-                min_col=1,
-                min_row=min(surcharge_rows),
-                max_row=max(surcharge_rows)
-            )
-
-            chart3.add_data(data, titles_from_data=False)
-            chart3.set_categories(cats)
-
-            worksheet.add_chart(chart3, "I38")
-            
 
         green_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
         orange_fill = PatternFill(start_color="FFD966", end_color="FFD966", fill_type="solid")
@@ -357,12 +259,12 @@ def export_excel(df_detail, synthese_par_horizon):
 
         for row in range(2, worksheet.max_row):
 
-            for col in [3,5,7]:  # colonnes Taux
+            for col in [3,5,7]:
 
                 cell = worksheet.cell(row=row, column=col)
 
                 try:
-                    value = float(str(cell.value).replace("%","").strip())
+                    value = float(cell.value)
 
                     if value < 70:
                         cell.fill = green_fill
@@ -373,12 +275,12 @@ def export_excel(df_detail, synthese_par_horizon):
 
                 except:
                     pass
-                    
+
         grey_fill = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
 
         for col in range(1, 8):
             worksheet.cell(row=worksheet.max_row, column=col).fill = grey_fill
-               
+
         worksheet.freeze_panes = "A2"
 
         for column_cells in worksheet.columns:
@@ -388,22 +290,21 @@ def export_excel(df_detail, synthese_par_horizon):
     return file_path
 
 # =========================================================
-# ENDPOINT PRINCIPAL (OPTIMISÉ POUR MAKE)
+# ENDPOINT API
 # =========================================================
-
-import requests
 
 @app.post("/process")
 async def process_file(payload: dict):
 
     try:
+
         file_url = payload.get("file_url")
 
         if not file_url:
             raise HTTPException(400, "file_url manquant")
 
-        # Téléchargement du fichier depuis Drive
         r = requests.get(file_url)
+
         if r.status_code != 200:
             raise HTTPException(400, "Impossible de télécharger le fichier")
 
@@ -412,7 +313,6 @@ async def process_file(payload: dict):
         with open(input_path, "wb") as f:
             f.write(r.content)
 
-        # IMPORTANT : moteur forcé
         df = pd.read_excel(input_path, engine="openpyxl")
 
         df.columns = [c.strip().lower() for c in df.columns]
@@ -464,21 +364,24 @@ async def process_file(payload: dict):
         result = {}
 
         for label, days, cap in horizons:
+
             tmp = devis.copy()
+
             tmp["charge_projet"] = tmp.apply(
                 lambda r: compute_charge(r, ca_max, days),
                 axis=1
             )
 
             agg = tmp.groupby("cdp")["charge_projet"].sum().reset_index()
+
             agg["taux_charge_%"] = agg["charge_projet"] / cap * 100
 
             result[label] = [
                 {
-            "cdp": r["cdp"],
-            "charge_cdp": round(float(r["charge_projet"]),1),
-            "taux_charge_%": round(float(r["taux_charge_%"]),1),
-        }
+                    "cdp": r["cdp"],
+                    "charge_cdp": round(float(r["charge_projet"]),1),
+                    "taux_charge_%": round(float(r["taux_charge_%"]),1),
+                }
                 for _, r in agg.sort_values("charge_projet", ascending=False).iterrows()
             ]
 
@@ -489,12 +392,9 @@ async def process_file(payload: dict):
             filename=output_path.name,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
     except Exception as e:
         raise HTTPException(500, str(e))
-        
-
-
-
 
 
 
