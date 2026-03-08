@@ -5,7 +5,7 @@ from pathlib import Path
 from datetime import date, datetime
 import pandas as pd
 import numpy as np
-
+from openpyxl.styles import PatternFill
 # =========================================================
 # APP & DOSSIERS
 # =========================================================
@@ -230,7 +230,33 @@ def export_excel(df_detail, synthese_par_horizon):
             sheet_name="Synthese_CDP",
             index=False
         )
+        worksheet = writer.sheets["Synthese_CDP"]
 
+        green_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
+        orange_fill = PatternFill(start_color="FFD966", end_color="FFD966", fill_type="solid")
+        red_fill = PatternFill(start_color="F4CCCC", end_color="F4CCCC", fill_type="solid")
+
+        for row in range(2, worksheet.max_row):
+
+            for col in [3,5,7]:  # colonnes Taux
+
+                cell = worksheet.cell(row=row, column=col)
+
+                try:
+                    value = float(str(cell.value).replace("%","").strip())
+
+                    if value < 70:
+                        cell.fill = green_fill
+                    elif value <= 100:
+                        cell.fill = orange_fill
+                    else:
+                        cell.fill = red_fill
+
+                except:
+                    pass
+
+        worksheet.freeze_panes = "A2"
+        
         df_detail.to_excel(
             writer,
             sheet_name="Detail_Projets",
@@ -344,6 +370,7 @@ async def process_file(payload: dict):
     except Exception as e:
         raise HTTPException(500, str(e))
         
+
 
 
 
