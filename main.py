@@ -506,7 +506,7 @@ async def process_file(payload: dict):
         df.columns = [c.strip().lower() for c in df.columns]
 
         col_map = {
-            "cdp": ["cdp", "cdp mobilier"],
+            "cdp": ["cdp", "cdp mobilier","cdp mob (new)"],
             "statut": ["statut de l'opportunité", "statut"],
             "date_echeance": ["date d'échéance du projet", "échéance", "echéance opport mob"],
             "complexite": ["complexité", "complexité du projet"],
@@ -583,6 +583,7 @@ async def process_file(payload: dict):
 
     except Exception as e:
         raise HTTPException(500, str(e))
+
 
 
 
