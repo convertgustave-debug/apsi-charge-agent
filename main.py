@@ -262,18 +262,44 @@ def export_excel(df_detail, synthese_par_horizon):
             worksheet.cell(row=row, column=9).number_format = '0.0"%"'
             worksheet.cell(row=row, column=10).number_format = '0.0"%"'
 
-        chart = BarChart()
-        chart.title = "Charge CDP - Horizon 1M"
-        chart.y_axis.title = "Points de charge"
-        chart.x_axis.title = "CDP"
+        chart8 = BarChart()
+        chart8.title = "Charge CDP - Horizon 1M"
+        chart8.y_axis.title = "Taux de charge"
+        chart8.x_axis.title = "CDP"
 
-        data = Reference(worksheet, min_col=2, min_row=1, max_row=worksheet.max_row-1)
+        data = Reference(worksheet, min_col=3, min_row=1, max_row=worksheet.max_row-1)
         cats = Reference(worksheet, min_col=1, min_row=2, max_row=worksheet.max_row-1)
 
-        chart.add_data(data, titles_from_data=True)
-        chart.set_categories(cats)
+        chart8.add_data(data, titles_from_data=True)
+        chart8.set_categories(cats)
 
-        worksheet.add_chart(chart, "H20")
+        worksheet.add_chart(chart8, "H20")
+
+        chart7 = BarChart()
+        chart7.title = "Charge CDP - Horizon 3M"
+        chart7.y_axis.title = "Taux de charge"
+        chart7.x_axis.title = "CDP"
+
+        data = Reference(worksheet, min_col=5, min_row=1, max_row=worksheet.max_row-1)
+        cats = Reference(worksheet, min_col=1, min_row=2, max_row=worksheet.max_row-1)
+
+        chart7.add_data(data, titles_from_data=True)
+        chart7.set_categories(cats)
+
+        worksheet.add_chart(chart7, "H35")
+
+        chart9 = BarChart()
+        chart9.title = "Charge CDP - Horizon 6M"
+        chart9.y_axis.title = "Taux de charge"
+        chart9.x_axis.title = "CDP"
+
+        data = Reference(worksheet, min_col=7, min_row=1, max_row=worksheet.max_row-1)
+        cats = Reference(worksheet, min_col=1, min_row=2, max_row=worksheet.max_row-1)
+
+        chart9.add_data(data, titles_from_data=True)
+        chart9.set_categories(cats)
+
+        worksheet.add_chart(chart9, "H50")
 
 
         chart4 = BarChart()
@@ -557,6 +583,7 @@ async def process_file(payload: dict):
 
     except Exception as e:
         raise HTTPException(500, str(e))
+
 
 
 
